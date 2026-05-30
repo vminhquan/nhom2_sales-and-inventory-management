@@ -5,6 +5,7 @@ using nhom2.Application.Services;
 using nhom2.Domain.Interfaces;
 using nhom2.Infrastructure.Repositories;
 using Microsoft.OpenApi.Models;
+using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -37,6 +38,10 @@ builder.Services.AddHttpClient<IUserClient, UserClient>(client =>
 
 // Thêm Controllers - chỉ định rõ Assembly
 builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
+    })
     .AddApplicationPart(typeof(nhom2.Api.Order.OrderController).Assembly);
 
 // Thêm Swagger/OpenAPI (tùy chọn, để test API dễ hơn)
