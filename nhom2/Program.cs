@@ -8,7 +8,9 @@ using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.WebHost.UseUrls("http://0.0.0.0:5000", "https://0.0.0.0:5001");
+// builder.WebHost.UseUrls("http://0.0.0.0:5000", "https://0.0.0.0:5001");
+var port = Environment.GetEnvironmentVariable("PORT") ?? "8080";
+builder.WebHost.UseUrls($"http://*:{port}");
 
 // Đăng ký DbContext với SQLite
 var connectionString = "Data Source=nhom2.db";
@@ -90,8 +92,6 @@ using (var scope = app.Services.CreateScope())
   
     Console.WriteLine("✅ Database initialized successfully!");
 }
-
-// Swagger UI - LUÔN BẬT để test API dễ hơn
 app.UseSwagger();
 app.UseSwaggerUI();
 
