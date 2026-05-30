@@ -187,7 +187,7 @@ namespace nhom2.Application.Services
 
             return currentStatus switch
             {
-                OrderStatus.Pending => newStatus == OrderStatus.Processing || newStatus == OrderStatus.Cancelled,
+                OrderStatus.Pending => newStatus == OrderStatus.Processing || newStatus == OrderStatus.Shipped || newStatus == OrderStatus.Cancelled,
                 OrderStatus.Processing => newStatus == OrderStatus.Shipped || newStatus == OrderStatus.Cancelled,
                 OrderStatus.Shipped => newStatus == OrderStatus.Completed,
                 OrderStatus.Completed => false,
