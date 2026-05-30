@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "QaVyGJKwcfE=",
+  "dgSpecHash": "zi2Im/UD3O8=",
   "success": true,
-  "projectFilePath": "/Users/minhquan/Documents/Sales-and-Inventory-Management/nhom2/nhom2.csproj",
+  "projectFilePath": "/Users/minhquan/Documents/nhom2_sales-and-inventory-management/nhom2/nhom2.csproj",
   "expectedPackageFiles": [
     "/Users/minhquan/.nuget/packages/humanizer.core/2.14.1/humanizer.core.2.14.1.nupkg.sha512",
     "/Users/minhquan/.nuget/packages/microsoft.bcl.asyncinterfaces/6.0.0/microsoft.bcl.asyncinterfaces.6.0.0.nupkg.sha512",
