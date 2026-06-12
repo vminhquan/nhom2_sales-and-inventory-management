@@ -9,6 +9,9 @@ namespace nhom2.Application.DTOs
     public class CreateOrderDto
     {
         public int UserId { get; set; }
+        public int? CustomerId { get; set; }
+        public decimal DiscountAmount { get; set; }
+        public decimal AmountPaid { get; set; }
         public List<OrderItemDto> OrderItems { get; set; } = new();
     }
 
@@ -18,6 +21,8 @@ namespace nhom2.Application.DTOs
     public class UpdateOrderDto
     {
         public int Id { get; set; }
+        public decimal DiscountAmount { get; set; }
+        public decimal AmountPaid { get; set; }
         public List<OrderItemDto> OrderItems { get; set; } = new();
     }
 
@@ -28,7 +33,6 @@ namespace nhom2.Application.DTOs
     {
         public int ProductId { get; set; }
         public int Quantity { get; set; }
-        public decimal Price { get; set; }
     }
 
     /// <summary>
@@ -38,8 +42,14 @@ namespace nhom2.Application.DTOs
     {
         public int Id { get; set; }
         public int UserId { get; set; }
+        public int? CustomerId { get; set; }
+        public string? CustomerName { get; set; }
         public string? Status { get; set; }
+        public decimal Subtotal { get; set; }
+        public decimal DiscountAmount { get; set; }
         public decimal Total { get; set; }
+        public decimal AmountPaid { get; set; }
+        public decimal DebtAmount { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime? LastModifiedAt { get; set; }
         public List<OrderItemResponseDto> OrderItems { get; set; } = new();
@@ -52,6 +62,7 @@ namespace nhom2.Application.DTOs
     {
         public int Id { get; set; }
         public int ProductId { get; set; }
+        public string ProductName { get; set; } = string.Empty;
         public int Quantity { get; set; }
         public decimal Price { get; set; }
         public decimal SubTotal { get; set; }
@@ -62,5 +73,4 @@ namespace nhom2.Application.DTOs
         public int Id { get; set; }
         public OrderStatus Status { get; set; }
     }
-    
 }

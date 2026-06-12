@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using nhom2.Application.Services;
 using System;
@@ -7,6 +8,7 @@ namespace nhom2.Api.User
 {
     [ApiController]
     [Route("api/users")]
+    [Authorize(Roles = "Admin")]
     public class UserController : ControllerBase
     {
         private readonly IUserClient _userClient;

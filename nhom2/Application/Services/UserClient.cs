@@ -9,18 +9,23 @@ namespace nhom2.Application.Services;
 public class UserClient : IUserClient
 {
     private readonly HttpClient _http;
+    private readonly string _internalApiKey;
     private static readonly JsonSerializerOptions JsonOptions = new JsonSerializerOptions
     {
         PropertyNameCaseInsensitive = true
     };
-    public UserClient(HttpClient http)
+    public UserClient(HttpClient http, IConfiguration configuration)
     {
         _http = http;
+        _internalApiKey = configuration["Services:InternalApiKey"]
+            ?? throw new InvalidOperationException("Services:InternalApiKey is not configured.");
     }
     // lấy user bằng api endpoint sv user và trả về lỗi 
     public async Task<UserDto?> GetUserByIdAsync(int id)
     {
-        var response = await _http.GetAsync($"/api/User/{id}");
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/api/internal/users/{id}");
+        request.Headers.Add("X-Internal-Api-Key", _internalApiKey);
+        var response = await _http.SendAsync(request);
         if (response.StatusCode == HttpStatusCode.NotFound)
             return null;
 
@@ -30,7 +35,9 @@ public class UserClient : IUserClient
     // lấy all user khi connected
     public async Task<List<UserDto>> GetUsersAsync()
     {
-        var response = await _http.GetAsync("/api/User");
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/internal/users");
+        request.Headers.Add("X-Internal-Api-Key", _internalApiKey);
+        var response = await _http.SendAsync(request);
         response.EnsureSuccessStatusCode();
         return await ReadUserListAsync(response);
     }

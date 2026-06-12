@@ -1,30 +1,31 @@
-using System;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
-using nhom2.Infrastructure.Data;
-using nhom2.Application.Services;
-using nhom2.Domain.Interfaces;
-using nhom2.Infrastructure.Repositories;
+using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using System.Text.Json.Serialization;
+using System.Text;
+using nhom2.Application.Services;
+using nhom2.Domain.Interfaces;
+using nhom2.Infrastructure.Data;
+using nhom2.Infrastructure.Repositories;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// builder.WebHost.UseUrls("http://0.0.0.0:5000", "https://0.0.0.0:5001");
-var port = Environment.GetEnvironmentVariable("PORT") ?? "8080";
+var port = Environment.GetEnvironmentVariable("PORT") ?? "5000";
 builder.WebHost.UseUrls($"http://*:{port}");
 
-// Đăng ký DbContext với SQLite
-var connectionString = "Data Source=nhom2.db";
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
+    ?? throw new InvalidOperationException("ConnectionStrings:DefaultConnection is missing.");
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseSqlite(connectionString)
+    options.UseNpgsql(connectionString)
 );
 
-// Đăng ký Dependency Injection
-// Repository
 builder.Services.AddScoped<IOrder, OrderRepo>();
-
-// Service
+builder.Services.AddScoped<ICustomer, CustomerRepo>();
+builder.Services.AddScoped<ISupplier, SupplierRepo>();
 builder.Services.AddScoped<IOrderService, OrderService>();
+builder.Services.AddScoped<ICustomerService, CustomerService>();
+builder.Services.AddScoped<ISupplierService, SupplierService>();
 
 builder.Services.AddHttpClient<IUserClient, UserClient>(client =>
 {
@@ -36,7 +37,26 @@ builder.Services.AddHttpClient<IUserClient, UserClient>(client =>
     client.Timeout = TimeSpan.FromSeconds(10);
 });
 
-// Thêm Controllers - chỉ định rõ Assembly
+builder.Services.AddHttpClient<IOrderEventPublisher, OrderEventPublisher>(client =>
+{
+    var baseUrl = builder.Configuration["Services:User:BaseUrl"];
+    if (string.IsNullOrWhiteSpace(baseUrl))
+        throw new InvalidOperationException("Services:User:BaseUrl is not configured.");
+
+    client.BaseAddress = new Uri(baseUrl);
+    client.Timeout = TimeSpan.FromSeconds(10);
+});
+
+builder.Services.AddHttpClient<IProductClient, ProductClient>(client =>
+{
+    var baseUrl = builder.Configuration["Services:Product:BaseUrl"];
+    if (string.IsNullOrWhiteSpace(baseUrl))
+        throw new InvalidOperationException("Services:Product:BaseUrl is not configured.");
+
+    client.BaseAddress = new Uri(baseUrl);
+    client.Timeout = TimeSpan.FromSeconds(10);
+});
+
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
     {
@@ -44,7 +64,6 @@ builder.Services.AddControllers()
     })
     .AddApplicationPart(typeof(nhom2.Api.Order.OrderController).Assembly);
 
-// Thêm Swagger/OpenAPI (tùy chọn, để test API dễ hơn)
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
@@ -74,49 +93,63 @@ builder.Services.AddSwaggerGen(options =>
     });
 });
 
-// Thêm CORS (frontend có thể gọi API)
+var jwtKey = builder.Configuration["Jwt:Key"];
+var jwtIssuer = builder.Configuration["Jwt:Issuer"];
+var jwtAudience = builder.Configuration["Jwt:Audience"];
+
+if (string.IsNullOrWhiteSpace(jwtKey)
+    || string.IsNullOrWhiteSpace(jwtIssuer)
+    || string.IsNullOrWhiteSpace(jwtAudience))
+{
+    throw new InvalidOperationException("Jwt configuration is incomplete.");
+}
+
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = jwtIssuer,
+            ValidAudience = jwtAudience,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
+            ClockSkew = TimeSpan.FromMinutes(1)
+        };
+    });
+builder.Services.AddAuthorization();
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
     {
-       policy.WithOrigins(
-            "http://192.168.31.118:5173",
-            "http://localhost:5173",
-            "https://front-end-sales-and-inventory-management.onrender.com"
-        )
-        .AllowAnyHeader()
-        .AllowAnyMethod();
+        policy.WithOrigins(
+             "http://192.168.31.118:5173",
+             "http://localhost:5173",
+             "https://front-end-sales-and-inventory-management.onrender.com"
+         )
+         .AllowAnyHeader()
+         .AllowAnyMethod();
     });
 });
 
-// BUILD APP
 var app = builder.Build();
 
 using (var scope = app.Services.CreateScope())
 {
     var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-    
-    // Áp dụng migration 
     dbContext.Database.Migrate();
-  
-    Console.WriteLine("✅ Database initialized successfully!");
 }
+
 app.UseSwagger();
 app.UseSwaggerUI();
 
-// HTTPS redirect
-// app.UseHttpsRedirection();
-
-// Enable CORS
 app.UseCors("AllowFrontend");
 
-// Authentication/Authorization 
 app.UseAuthentication();
 app.UseAuthorization();
 
-// Map Controllers
 app.MapControllers();
-
-// run app
-Console.WriteLine("Server starting on https://0.0.0.0:5001 and http://0.0.0.0:5000");
 app.Run();

@@ -22,6 +22,7 @@ namespace nhom2.Infrastructure.Repositories
         {
             return await _context.Orders
                 .Include(o => o.OrderItems)
+                .Include(o => o.Customer)
                 .FirstOrDefaultAsync(o => o.Id == id);
         }
 
@@ -29,7 +30,19 @@ namespace nhom2.Infrastructure.Repositories
         {
             return await _context.Orders
                 .Include(o => o.OrderItems)
+                .Include(o => o.Customer)
                 .Where(o => o.UserId == userId)
+                .OrderByDescending(o => o.CreatedAt)
+                .ToListAsync();
+        }
+
+        public async Task<List<Order>> GetAllOrdersByCustomerId(int customerId)
+        {
+            return await _context.Orders
+                .Include(o => o.OrderItems)
+                .Include(o => o.Customer)
+                .Where(o => o.CustomerId == customerId)
+                .OrderByDescending(o => o.CreatedAt)
                 .ToListAsync();
         }
 
@@ -37,6 +50,8 @@ namespace nhom2.Infrastructure.Repositories
         {
             return await _context.Orders
                 .Include(o => o.OrderItems)
+                .Include(o => o.Customer)
+                .OrderByDescending(o => o.CreatedAt)
                 .ToListAsync();
         }
 
@@ -54,7 +69,10 @@ namespace nhom2.Infrastructure.Repositories
 
         public async Task DeleteOrder(int orderId)
         {
-            var order = await _context.Orders.FindAsync(orderId);
+            var order = await _context.Orders
+                .Include(o => o.OrderItems)
+                .FirstOrDefaultAsync(o => o.Id == orderId);
+
             if (order != null)
             {
                 _context.Orders.Remove(order);

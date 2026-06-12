@@ -1,8 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
-
 namespace nhom2.Domain.Entities
 {
     public class OrderItem
@@ -10,6 +5,7 @@ namespace nhom2.Domain.Entities
         public int Id { get; set; }
         public int OrderId { get; set; }
         public int ProductId { get; set; }
+        public string ProductName { get; set; } = string.Empty;
         public int Quantity { get; set; }
         public decimal Price { get; set; }
 
@@ -17,14 +13,20 @@ namespace nhom2.Domain.Entities
 
         public OrderItem(int quantity, decimal price)
         {
-        if (quantity <= 0) throw new ArgumentException("Số lượng phải lớn hơn 0");
-        if (price < 0)throw new ArgumentException("Giá không được là số âm");
-        
-        Quantity = quantity;
-        Price = price;
+            if (quantity <= 0)
+                throw new ArgumentException("Số lượng phải lớn hơn 0");
+
+            if (price < 0)
+                throw new ArgumentException("Giá không được là số âm");
+
+            Quantity = quantity;
+            Price = price;
         }
-    public OrderItem() { }
-    public decimal SubTotal => Quantity * Price;
+
+        public OrderItem()
+        {
+        }
+
+        public decimal SubTotal => Quantity * Price;
     }
-   
 }

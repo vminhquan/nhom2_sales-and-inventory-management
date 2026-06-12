@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using nhom2.Application.DTOs;
 using nhom2.Application.Services;
@@ -9,6 +10,7 @@ namespace nhom2.Api.Order
 {
     [ApiController]
     [Route("api/[controller]")]
+    [Authorize(Roles = "Admin,SalesStaff")]
     public class OrderController : ControllerBase
     {
         private readonly IOrderService _orderService;
@@ -72,12 +74,24 @@ namespace nhom2.Api.Order
                     return BadRequest(new { success = false, message = "Dữ liệu không hợp lệ" });
 
                 var order = await _orderService.CreateOrderAsync(createOrderDto);
-                return CreatedAtAction(nameof(GetOrderById), new { id = order.Id }, 
+                return CreatedAtAction(nameof(GetOrderById), new { id = order.Id },
                     new { success = true, data = order });
             }
             catch (ArgumentException ex)
             {
                 return BadRequest(new { success = false, message = ex.Message });
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { success = false, message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Conflict(new { success = false, message = ex.Message });
+            }
+            catch (HttpRequestException ex)
+            {
+                return StatusCode(503, new { success = false, message = ex.Message });
             }
             catch (Exception ex)
             {
@@ -111,6 +125,10 @@ namespace nhom2.Api.Order
             {
                 return BadRequest(new { success = false, message = ex.Message });
             }
+            catch (HttpRequestException ex)
+            {
+                return StatusCode(503, new { success = false, message = ex.Message });
+            }
             catch (Exception ex)
             {
                 return StatusCode(500, new { success = false, message = ex.Message });
@@ -143,6 +161,10 @@ namespace nhom2.Api.Order
             {
                 return BadRequest(new { success = false, message = ex.Message });
             }
+            catch (HttpRequestException ex)
+            {
+                return StatusCode(503, new { success = false, message = ex.Message });
+            }
             catch (Exception ex)
             {
                 return StatusCode(500, new { success = false, message = ex.Message });
@@ -164,6 +186,10 @@ namespace nhom2.Api.Order
             catch (InvalidOperationException ex)
             {
                 return BadRequest(new { success = false, message = ex.Message });
+            }
+            catch (HttpRequestException ex)
+            {
+                return StatusCode(503, new { success = false, message = ex.Message });
             }
             catch (Exception ex)
             {

@@ -1,221 +1,420 @@
+using nhom2.Application.DTOs;
 using nhom2.Domain.Entities;
 using nhom2.Domain.Interfaces;
-using nhom2.Application.DTOs;
-using nhom2.Application.Mock;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
 
-namespace nhom2.Application.Services
+namespace nhom2.Application.Services;
+
+public class OrderService : IOrderService
 {
-    
-    // business logic liên quan đến Order
-    // tầng Application - xử lý logic giữa API và Repository
-    public class OrderService : IOrderService
+    private readonly IOrder _orderRepository;
+    private readonly ICustomer _customerRepository;
+    private readonly IUserClient _userClient;
+    private readonly IProductClient _productClient;
+    private readonly IOrderEventPublisher _eventPublisher;
+
+    public OrderService(
+        IOrder orderRepository,
+        ICustomer customerRepository,
+        IUserClient userClient,
+        IProductClient productClient,
+        IOrderEventPublisher eventPublisher)
     {
-        private readonly IOrder _orderRepository;
-        private readonly IUserClient _userClient;
+        _orderRepository = orderRepository;
+        _customerRepository = customerRepository;
+        _userClient = userClient;
+        _productClient = productClient;
+        _eventPublisher = eventPublisher;
+    }
 
-        public OrderService(IOrder orderRepository, IUserClient userClient)
+    public async Task<List<OrderResponseDto>> GetAllOrdersAsync()
+    {
+        return (await _orderRepository.GetAllOrders()).Select(MapToDto).ToList();
+    }
+
+    public async Task<OrderResponseDto?> GetOrderByIdAsync(int id)
+    {
+        var order = await _orderRepository.GetOrderById(id);
+        return order is null ? null : MapToDto(order);
+    }
+
+    public async Task<List<OrderResponseDto>> GetOrdersByUserIdAsync(int userId)
+    {
+        return (await _orderRepository.GetAllOrdersByUserId(userId)).Select(MapToDto).ToList();
+    }
+
+    public async Task<OrderResponseDto> CreateOrderAsync(CreateOrderDto dto)
+    {
+        ValidateOrderInput(dto.UserId, dto.OrderItems, dto.DiscountAmount, dto.AmountPaid);
+
+        if (await _userClient.GetUserByIdAsync(dto.UserId) is null)
+            throw new KeyNotFoundException($"User với ID {dto.UserId} không tồn tại");
+
+        var customer = await GetCustomerAsync(dto.CustomerId);
+        var requestedItems = AggregateItems(dto.OrderItems);
+        var reservations = new List<ReserveStockResponse>();
+        Order? order = null;
+
+        try
         {
-            _orderRepository = orderRepository;
-            _userClient = userClient;
-        }
-
-        
-        // Lấy tất cả đơn hàng
-
-        public async Task<List<OrderResponseDto>> GetAllOrdersAsync()
-        {
-            var orders = await _orderRepository.GetAllOrders();
-            return orders.Select(MapToDto).ToList();
-        }
-
-        
-        // Lấy đơn hàng theo ID
-
-        public async Task<OrderResponseDto?> GetOrderByIdAsync(int id)
-        {
-            var order = await _orderRepository.GetOrderById(id);
-            return order != null ? MapToDto(order) : null;
-        }
-
-        
-        // Lấy tất cả đơn hàng của một user
-
-        public async Task<List<OrderResponseDto>> GetOrdersByUserIdAsync(int userId)
-        {
-            var orders = await _orderRepository.GetAllOrdersByUserId(userId);
-            return orders.Select(MapToDto).ToList();
-        }
-
-        
-        /// Tạo đơn hàng mới
-
-        public async Task<OrderResponseDto> CreateOrderAsync(CreateOrderDto createOrderDto)
-        {
-            // Validation
-            if (createOrderDto.UserId <= 0)
-                throw new ArgumentException("UserId phải lớn hơn 0");
-
-            if (!createOrderDto.OrderItems.Any())
-                throw new ArgumentException("Đơn hàng phải có ít nhất 1 sản phẩm");
-
-            // Kiểm tra User tồn tại từ User service
-            var user = await _userClient.GetUserByIdAsync(createOrderDto.UserId);
-            if (user == null)
-                throw new KeyNotFoundException($"User với ID {createOrderDto.UserId} không tồn tại");
-
-            // Tạo Order mới
-            var order = new Order
+            foreach (var item in requestedItems)
             {
-                UserId = createOrderDto.UserId,
+                reservations.Add(await _productClient.ReserveStockAsync(new ReserveStockRequest
+                {
+                    ProductId = item.ProductId,
+                    Quantity = item.Quantity
+                }));
+            }
+
+            order = new Order
+            {
+                UserId = dto.UserId,
+                CustomerId = customer?.Id,
+                Customer = customer,
                 CreatedAt = DateTime.UtcNow,
                 Status = OrderStatus.Pending,
-                OrderItems = new List<OrderItem>()
-            };
-
-            // Thêm OrderItems và validate Product
-            foreach (var itemDto in createOrderDto.OrderItems)
-            {
-                // Kiểm tra Product tồn tại từ Mock data
-                var product = MockProductData.GetProductById(itemDto.ProductId);
-                if (product == null)
-                    throw new KeyNotFoundException($"Product với ID {itemDto.ProductId} không tồn tại");
-
-                // Kiểm tra stock có đủ không
-                if (!MockProductData.HasStock(itemDto.ProductId, itemDto.Quantity))
-                    throw new InvalidOperationException($"Product {product.Name} chỉ còn {product.Stock} sản phẩm");
-
-                var orderItem = new OrderItem(itemDto.Quantity, itemDto.Price)
+                DiscountAmount = dto.DiscountAmount,
+                AmountPaid = dto.AmountPaid,
+                OrderItems = reservations.Select(reservation => new OrderItem(
+                    requestedItems.Single(item => item.ProductId == reservation.Product.Id).Quantity,
+                    reservation.Product.SellingPrice)
                 {
-                    ProductId = itemDto.ProductId
-                };
-                order.OrderItems.Add(orderItem);
-            }
-
-            // Lưu vào database
-            await _orderRepository.AddOrder(order);
-
-            return MapToDto(order);
-        }
-
-        
-        public async Task<OrderResponseDto> UpdateOrderAsync(UpdateOrderDto updateOrderDto)
-        {
-            var order = await _orderRepository.GetOrderById(updateOrderDto.Id);
-            
-            if (order == null)
-                throw new KeyNotFoundException($"Không tìm thấy Order với ID {updateOrderDto.Id}");
-
-            if (updateOrderDto.OrderItems == null || !updateOrderDto.OrderItems.Any())
-                throw new ArgumentException("Đơn hàng phải có ít nhất 1 sản phẩm");
-
-            order.OrderItems.Clear();
-
-            foreach (var itemDto in updateOrderDto.OrderItems)
-            {
-                var product = MockProductData.GetProductById(itemDto.ProductId);
-                if (product == null)
-                    throw new KeyNotFoundException($"Product với ID {itemDto.ProductId} không tồn tại");
-
-                if (!MockProductData.HasStock(itemDto.ProductId, itemDto.Quantity))
-                    throw new InvalidOperationException($"Product {product.Name} chỉ còn {product.Stock} sản phẩm");
-
-                var orderItem = new OrderItem(itemDto.Quantity, itemDto.Price)
-                {
-                    ProductId = itemDto.ProductId
-                };
-
-                order.OrderItems.Add(orderItem);
-            }
-
-            order.LastModifiedAt = DateTime.UtcNow;
-
-            await _orderRepository.UpdateOrder(order);
-
-            return MapToDto(order);
-        }
-
-        // Cập nhật trạng thái đơn hàng
-        public async Task<OrderResponseDto> UpdateOrderStatusAsync(UpdateOrderStatusDto updateOrderStatusDto)
-        {
-            var order = await _orderRepository.GetOrderById(updateOrderStatusDto.Id);
-
-            if (order == null)
-                throw new KeyNotFoundException($"Không tìm thấy Order với ID {updateOrderStatusDto.Id}");
-
-            if (!Enum.IsDefined(typeof(OrderStatus), updateOrderStatusDto.Status))
-                throw new ArgumentException($"Trạng thái '{updateOrderStatusDto.Status}' không hợp lệ");
-
-            var newStatus = updateOrderStatusDto.Status;
-
-            if (!IsValidTransition(order.Status, newStatus))
-                throw new InvalidOperationException($"Không thể chuyển trạng thái từ '{order.Status}' sang '{newStatus}'");
-
-            order.Status = newStatus;
-            order.LastModifiedAt = DateTime.UtcNow;
-
-            await _orderRepository.UpdateOrder(order);
-
-            return MapToDto(order);
-        }
-
-        // Xóa đơn hàng
-        public async Task<bool> DeleteOrderAsync(int id)
-        {
-            var order = await _orderRepository.GetOrderById(id);
-            
-            if (order == null)
-                throw new KeyNotFoundException($"Không tìm thấy Order với ID {id}");
-
-            // Chỉ cho phép xóa nếu đơn hàng chưa được xử lý
-            if (order.Status != OrderStatus.Pending)
-                throw new InvalidOperationException("Chỉ có thể xóa đơn hàng ở trạng thái Pending");
-
-            await _orderRepository.DeleteOrder(id);
-            return true;
-        }
-
-        
-        // Luồng tối giản: Pending -> Processing -> Shipped -> Completed; Cancelled là kết thúc
-        private static bool IsValidTransition(OrderStatus currentStatus, OrderStatus newStatus)
-        {
-            if (currentStatus == newStatus)
-                return true;
-
-            return currentStatus switch
-            {
-                OrderStatus.Pending => newStatus == OrderStatus.Processing || newStatus == OrderStatus.Shipped || newStatus == OrderStatus.Cancelled,
-                OrderStatus.Processing => newStatus == OrderStatus.Shipped || newStatus == OrderStatus.Cancelled,
-                OrderStatus.Shipped => newStatus == OrderStatus.Completed,
-                OrderStatus.Completed => false,
-                OrderStatus.Cancelled => false,
-                _ => false
-            };
-        }
-
-        // Chuyển đổi Order entity thành OrderResponseDto
-        private OrderResponseDto MapToDto(Order order)
-        {
-            return new OrderResponseDto
-            {
-                Id = order.Id,
-                UserId = order.UserId,
-                Status = order.Status.ToString(),
-                Total = order.OrderItems.Sum(oi => oi.SubTotal),
-                CreatedAt = order.CreatedAt,
-                LastModifiedAt = order.LastModifiedAt,
-                OrderItems = order.OrderItems.Select(oi => new OrderItemResponseDto
-                {
-                    Id = oi.Id,
-                    ProductId = oi.ProductId,
-                    Quantity = oi.Quantity,
-                    Price = oi.Price,
-                    SubTotal = oi.SubTotal
+                    ProductId = reservation.Product.Id,
+                    ProductName = reservation.Product.Name
                 }).ToList()
             };
+
+            ValidateAmounts(order.Subtotal, order.DiscountAmount, order.AmountPaid);
+            await _orderRepository.AddOrder(order);
+            await _eventPublisher.PublishAsync(CreateEvent(order, "order.created"));
+
+            return MapToDto(order);
         }
+        catch
+        {
+            if (order?.Id > 0)
+                await TryDeleteOrderAsync(order.Id);
+
+            await ReleaseReservationsAsync(reservations);
+            throw;
+        }
+    }
+
+    public async Task<OrderResponseDto> UpdateOrderAsync(UpdateOrderDto dto)
+    {
+        var order = await _orderRepository.GetOrderById(dto.Id)
+            ?? throw new KeyNotFoundException($"Không tìm thấy Order với ID {dto.Id}");
+
+        if (order.Status != OrderStatus.Pending)
+            throw new InvalidOperationException("Chỉ có thể sửa sản phẩm của đơn hàng Pending");
+
+        ValidateOrderInput(order.UserId, dto.OrderItems, dto.DiscountAmount, dto.AmountPaid);
+
+        var requestedItems = AggregateItems(dto.OrderItems);
+        var oldQuantities = order.OrderItems
+            .GroupBy(item => item.ProductId)
+            .ToDictionary(group => group.Key, group => group.Sum(item => item.Quantity));
+        var newQuantities = requestedItems.ToDictionary(item => item.ProductId, item => item.Quantity);
+        var productIds = oldQuantities.Keys.Union(newQuantities.Keys).ToList();
+        var products = new Dictionary<int, ProductDto>();
+        var addedStock = new List<ReserveStockResponse>();
+        var orderUpdated = false;
+
+        try
+        {
+            foreach (var productId in productIds)
+            {
+                var oldQuantity = oldQuantities.GetValueOrDefault(productId);
+                var newQuantity = newQuantities.GetValueOrDefault(productId);
+                var delta = newQuantity - oldQuantity;
+
+                if (delta > 0)
+                {
+                    var reservation = await _productClient.ReserveStockAsync(new ReserveStockRequest
+                    {
+                        ProductId = productId,
+                        Quantity = delta
+                    });
+                    addedStock.Add(reservation);
+                    products[productId] = reservation.Product;
+                }
+                else if (newQuantity > 0)
+                {
+                    products[productId] = await _productClient.GetProductByIdAsync(productId)
+                        ?? throw new KeyNotFoundException($"Product với ID {productId} không tồn tại");
+                }
+            }
+
+            order.OrderItems.Clear();
+            foreach (var item in requestedItems)
+            {
+                var product = products[item.ProductId];
+                order.OrderItems.Add(new OrderItem(item.Quantity, product.SellingPrice)
+                {
+                    ProductId = product.Id,
+                    ProductName = product.Name
+                });
+            }
+
+            order.DiscountAmount = dto.DiscountAmount;
+            order.AmountPaid = dto.AmountPaid;
+            order.LastModifiedAt = DateTime.UtcNow;
+            ValidateAmounts(order.Subtotal, order.DiscountAmount, order.AmountPaid);
+
+            await _orderRepository.UpdateOrder(order);
+            orderUpdated = true;
+
+            foreach (var productId in productIds)
+            {
+                var releasedQuantity = oldQuantities.GetValueOrDefault(productId)
+                    - newQuantities.GetValueOrDefault(productId);
+                if (releasedQuantity > 0)
+                    await _productClient.ReleaseStockAsync(productId, releasedQuantity);
+            }
+
+            await _eventPublisher.PublishAsync(CreateEvent(order, "order.updated"));
+            return MapToDto(order);
+        }
+        catch
+        {
+            if (!orderUpdated)
+                await ReleaseReservationsAsync(addedStock);
+            throw;
+        }
+    }
+
+    public async Task<OrderResponseDto> UpdateOrderStatusAsync(UpdateOrderStatusDto dto)
+    {
+        var order = await _orderRepository.GetOrderById(dto.Id)
+            ?? throw new KeyNotFoundException($"Không tìm thấy Order với ID {dto.Id}");
+
+        if (!Enum.IsDefined(dto.Status))
+            throw new ArgumentException($"Trạng thái '{dto.Status}' không hợp lệ");
+
+        if (!IsValidTransition(order.Status, dto.Status))
+        {
+            throw new InvalidOperationException(
+                $"Không thể chuyển trạng thái từ '{order.Status}' sang '{dto.Status}'");
+        }
+
+        var oldStatus = order.Status;
+        var shouldReleaseStock = oldStatus != OrderStatus.Cancelled
+            && dto.Status == OrderStatus.Cancelled;
+
+        if (shouldReleaseStock)
+            await ReleaseOrderStockAsync(order);
+
+        try
+        {
+            order.Status = dto.Status;
+            order.LastModifiedAt = DateTime.UtcNow;
+            await _orderRepository.UpdateOrder(order);
+        }
+        catch
+        {
+            if (shouldReleaseStock)
+                await ReserveOrderStockAsync(order);
+            throw;
+        }
+
+        await _eventPublisher.PublishAsync(CreateEvent(order, "order.status-changed"));
+        return MapToDto(order);
+    }
+
+    public async Task<bool> DeleteOrderAsync(int id)
+    {
+        var order = await _orderRepository.GetOrderById(id)
+            ?? throw new KeyNotFoundException($"Không tìm thấy Order với ID {id}");
+
+        if (order.Status != OrderStatus.Pending)
+            throw new InvalidOperationException("Chỉ có thể xóa đơn hàng ở trạng thái Pending");
+
+        await ReleaseOrderStockAsync(order);
+        try
+        {
+            await _orderRepository.DeleteOrder(id);
+        }
+        catch
+        {
+            await ReserveOrderStockAsync(order);
+            throw;
+        }
+
+        order.Status = OrderStatus.Cancelled;
+        order.LastModifiedAt = DateTime.UtcNow;
+        await _eventPublisher.PublishAsync(CreateEvent(order, "order.deleted"));
+        return true;
+    }
+
+    private async Task<Customer?> GetCustomerAsync(int? customerId)
+    {
+        if (!customerId.HasValue)
+            return null;
+
+        return await _customerRepository.GetByIdAsync(customerId.Value)
+            ?? throw new KeyNotFoundException($"Customer với ID {customerId.Value} không tồn tại");
+    }
+
+    private static List<OrderItemDto> AggregateItems(IEnumerable<OrderItemDto> items)
+    {
+        return items
+            .GroupBy(item => item.ProductId)
+            .Select(group => new OrderItemDto
+            {
+                ProductId = group.Key,
+                Quantity = group.Sum(item => item.Quantity)
+            })
+            .ToList();
+    }
+
+    private static void ValidateOrderInput(
+        int userId,
+        IReadOnlyCollection<OrderItemDto>? items,
+        decimal discountAmount,
+        decimal amountPaid)
+    {
+        if (userId <= 0)
+            throw new ArgumentException("UserId phải lớn hơn 0");
+
+        if (items is null || items.Count == 0)
+            throw new ArgumentException("Đơn hàng phải có ít nhất 1 sản phẩm");
+
+        if (items.Any(item => item.ProductId <= 0 || item.Quantity <= 0))
+            throw new ArgumentException("ProductId và số lượng phải lớn hơn 0");
+
+        if (discountAmount < 0)
+            throw new ArgumentException("Chiết khấu không được là số âm");
+
+        if (amountPaid < 0)
+            throw new ArgumentException("Số tiền đã thanh toán không được là số âm");
+    }
+
+    private static void ValidateAmounts(decimal subtotal, decimal discountAmount, decimal amountPaid)
+    {
+        if (discountAmount > subtotal)
+            throw new ArgumentException("Chiết khấu không được lớn hơn tạm tính");
+
+        var total = subtotal - discountAmount;
+        if (amountPaid > total)
+            throw new ArgumentException("Số tiền thanh toán không được lớn hơn tổng đơn hàng");
+    }
+
+    private async Task ReleaseOrderStockAsync(Order order)
+    {
+        foreach (var item in order.OrderItems.GroupBy(item => item.ProductId))
+            await _productClient.ReleaseStockAsync(item.Key, item.Sum(value => value.Quantity));
+    }
+
+    private async Task ReserveOrderStockAsync(Order order)
+    {
+        foreach (var item in order.OrderItems.GroupBy(item => item.ProductId))
+        {
+            await _productClient.ReserveStockAsync(new ReserveStockRequest
+            {
+                ProductId = item.Key,
+                Quantity = item.Sum(value => value.Quantity)
+            });
+        }
+    }
+
+    private async Task ReleaseReservationsAsync(IEnumerable<ReserveStockResponse> reservations)
+    {
+        foreach (var reservation in reservations.Reverse())
+        {
+            try
+            {
+                await _productClient.ReleaseStockAsync(
+                    reservation.Product.Id,
+                    reservation.PreviousQuantity - reservation.CurrentQuantity);
+            }
+            catch
+            {
+                // Preserve the original failure. Stock recovery can be retried operationally.
+            }
+        }
+    }
+
+    private async Task TryDeleteOrderAsync(int orderId)
+    {
+        try
+        {
+            await _orderRepository.DeleteOrder(orderId);
+        }
+        catch
+        {
+            // Preserve the original failure from the downstream service.
+        }
+    }
+
+    private static bool IsValidTransition(OrderStatus currentStatus, OrderStatus newStatus)
+    {
+        if (currentStatus == newStatus)
+            return true;
+
+        return currentStatus switch
+        {
+            OrderStatus.Pending => newStatus is OrderStatus.Processing
+                or OrderStatus.Shipped
+                or OrderStatus.Cancelled,
+            OrderStatus.Processing => newStatus is OrderStatus.Shipped or OrderStatus.Cancelled,
+            OrderStatus.Shipped => newStatus is OrderStatus.Completed or OrderStatus.Cancelled,
+            OrderStatus.Completed => false,
+            OrderStatus.Cancelled => false,
+            _ => false
+        };
+    }
+
+    private static OrderResponseDto MapToDto(Order order)
+    {
+        return new OrderResponseDto
+        {
+            Id = order.Id,
+            UserId = order.UserId,
+            CustomerId = order.CustomerId,
+            CustomerName = order.Customer?.FullName,
+            Status = order.Status.ToString(),
+            Subtotal = order.Subtotal,
+            DiscountAmount = order.DiscountAmount,
+            Total = order.TotalAmount,
+            AmountPaid = order.AmountPaid,
+            DebtAmount = order.DebtAmount,
+            CreatedAt = order.CreatedAt,
+            LastModifiedAt = order.LastModifiedAt,
+            OrderItems = order.OrderItems.Select(item => new OrderItemResponseDto
+            {
+                Id = item.Id,
+                ProductId = item.ProductId,
+                ProductName = item.ProductName,
+                Quantity = item.Quantity,
+                Price = item.Price,
+                SubTotal = item.SubTotal
+            }).ToList()
+        };
+    }
+
+    private static OrderEventDto CreateEvent(Order order, string eventType)
+    {
+        return new OrderEventDto
+        {
+            EventType = eventType,
+            OrderId = order.Id,
+            UserId = order.UserId,
+            CustomerId = order.CustomerId,
+            CustomerName = order.Customer?.FullName,
+            Status = order.Status.ToString(),
+            Subtotal = order.Subtotal,
+            DiscountAmount = order.DiscountAmount,
+            TotalAmount = order.TotalAmount,
+            AmountPaid = order.AmountPaid,
+            DebtAmount = order.DebtAmount,
+            CreatedAt = order.CreatedAt,
+            Items = order.OrderItems.Select(item => new OrderEventItemDto
+            {
+                ProductId = item.ProductId,
+                ProductName = item.ProductName,
+                Quantity = item.Quantity,
+                UnitPrice = item.Price,
+                Subtotal = item.SubTotal
+            }).ToList()
+        };
     }
 }

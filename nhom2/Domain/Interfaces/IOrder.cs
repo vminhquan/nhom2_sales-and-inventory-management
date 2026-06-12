@@ -9,6 +9,7 @@ namespace nhom2.Domain.Interfaces
     {
         Task<Order?> GetOrderById(int id);
         Task<List<Order>> GetAllOrdersByUserId(int userId);
+        Task<List<Order>> GetAllOrdersByCustomerId(int customerId);
         Task<List<Order>> GetAllOrders();
         Task AddOrder(Order order);
         Task UpdateOrder(Order order);
