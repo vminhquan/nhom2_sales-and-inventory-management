@@ -7,7 +7,7 @@ namespace nhom2.Api.Supplier;
 
 [ApiController]
 [Route("api/suppliers")]
-[Authorize(Roles = "Admin,SalesStaff")]
+[Authorize(Roles = "Admin,SalesStaff,WarehouseKeeper")]
 public class SupplierController : ControllerBase
 {
     private readonly ISupplierService _supplierService;
@@ -33,6 +33,7 @@ public class SupplierController : ControllerBase
     }
 
     [HttpPost]
+    [Authorize(Roles = "Admin,SalesStaff")]
     public async Task<IActionResult> Create(CreateSupplierDto dto)
     {
         try
@@ -48,6 +49,7 @@ public class SupplierController : ControllerBase
     }
 
     [HttpPut("{id:int}")]
+    [Authorize(Roles = "Admin,SalesStaff")]
     public async Task<IActionResult> Update(int id, UpdateSupplierDto dto)
     {
         try

@@ -3,7 +3,6 @@ namespace nhom2.Application.DTOs
     public class ProductDto
     {
         public int Id { get; set; }
-        public string ProductCode { get; set; } = string.Empty;
         public string Name { get; set; } = string.Empty;
         public decimal SellingPrice { get; set; }
         public string CategoryName { get; set; } = string.Empty;
