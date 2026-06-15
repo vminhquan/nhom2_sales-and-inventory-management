@@ -86,7 +86,7 @@ public class PaymentController : ControllerBase
         await _paymentService.CancelAsync(orderCode);
         var frontend = _configuration["Checkout:FrontendBaseUrl"]?.TrimEnd('/')
             ?? throw new InvalidOperationException("Checkout:FrontendBaseUrl is not configured.");
-        return Redirect($"{frontend}/payment/cancelled?orderCode={orderCode}");
+        return Redirect($"{frontend}/#/payment/cancelled?orderCode={orderCode}");
     }
 
     [HttpPost("webhook")]

@@ -96,7 +96,7 @@ public class PaymentService : IPaymentService
                 orderCode,
                 checked((int)order.TotalAmount),
                 $"Thanh toan DH {order.Id}",
-                $"{frontendUrl}/payment/success?orderCode={orderCode}",
+                $"{frontendUrl}/#/payment/success?orderCode={orderCode}",
                 $"{backendUrl}/api/payments/cancel-return?orderCode={orderCode}",
                 new DateTimeOffset(expiresAt).ToUnixTimeSeconds(),
                 order.OrderItems.Select(item => (object)new
