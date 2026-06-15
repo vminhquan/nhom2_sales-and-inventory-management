@@ -184,7 +184,8 @@ public class PaymentService : IPaymentService
                 await _productClient.ReserveStockAsync(new ReserveStockRequest
                 {
                     ProductId = item.ProductId,
-                    Quantity = item.Quantity
+                    Quantity = item.Quantity,
+                    ReferenceId = $"payos:{orderCode}:{item.ProductId}:reserve"
                 });
                 reserved.Add((item.ProductId, item.Quantity));
             }
@@ -192,7 +193,10 @@ public class PaymentService : IPaymentService
         catch
         {
             foreach (var item in reserved)
-                await _productClient.ReleaseStockAsync(item.ProductId, item.Quantity);
+                await _productClient.ReleaseStockAsync(
+                    item.ProductId,
+                    item.Quantity,
+                    $"payos:{orderCode}:{item.ProductId}:rollback");
             payment.Order.Status = OrderStatus.PaymentFailed;
             payment.Order.LastModifiedAt = DateTime.UtcNow;
             await _context.SaveChangesAsync();

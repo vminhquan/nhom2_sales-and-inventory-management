@@ -128,6 +128,47 @@ namespace nhom2.Migrations
                     b.ToTable("OrderItems");
                 });
 
+            modelBuilder.Entity("nhom2.Domain.Entities.PaymentTransaction", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("CheckoutUrl")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long>("OrderCode")
+                        .HasColumnType("bigint");
+
+                    b.Property<int>("OrderId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("PayOsTransactionReference")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrderCode")
+                        .IsUnique();
+
+                    b.HasIndex("OrderId")
+                        .IsUnique();
+
+                    b.ToTable("PaymentTransactions");
+                });
+
             modelBuilder.Entity("nhom2.Domain.Entities.Supplier", b =>
                 {
                     b.Property<int>("Id")
@@ -189,6 +230,17 @@ namespace nhom2.Migrations
                     b.Navigation("Order");
                 });
 
+            modelBuilder.Entity("nhom2.Domain.Entities.PaymentTransaction", b =>
+                {
+                    b.HasOne("nhom2.Domain.Entities.Order", "Order")
+                        .WithOne("Payment")
+                        .HasForeignKey("nhom2.Domain.Entities.PaymentTransaction", "OrderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Order");
+                });
+
             modelBuilder.Entity("nhom2.Domain.Entities.Customer", b =>
                 {
                     b.Navigation("Orders");
@@ -197,6 +249,8 @@ namespace nhom2.Migrations
             modelBuilder.Entity("nhom2.Domain.Entities.Order", b =>
                 {
                     b.Navigation("OrderItems");
+
+                    b.Navigation("Payment");
                 });
 #pragma warning restore 612, 618
         }

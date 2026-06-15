@@ -81,5 +81,9 @@ public class SupplierController : ControllerBase
         {
             return Conflict(new { success = false, message = ex.Message });
         }
+        catch (HttpRequestException ex)
+        {
+            return StatusCode(503, new { success = false, message = ex.Message });
+        }
     }
 }

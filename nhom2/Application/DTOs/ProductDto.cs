@@ -14,6 +14,7 @@ namespace nhom2.Application.DTOs
     {
         public int ProductId { get; set; }
         public int Quantity { get; set; }
+        public string? ReferenceId { get; set; }
     }
 
     public class ReserveStockResponse
