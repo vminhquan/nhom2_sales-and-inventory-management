@@ -163,8 +163,9 @@ app.Run();
 
 static string GetDatabaseConnectionString(IConfiguration configuration)
 {
-    var connectionString = configuration.GetConnectionString("DefaultConnection");
-    var databaseUrl = configuration["DATABASE_URL"];
+    var connectionString = NormalizeConnectionString(
+        configuration.GetConnectionString("DefaultConnection"));
+    var databaseUrl = NormalizeConnectionString(configuration["DATABASE_URL"]);
 
     if (!string.IsNullOrWhiteSpace(databaseUrl))
         connectionString = ConvertDatabaseUrl(databaseUrl);
@@ -176,14 +177,27 @@ static string GetDatabaseConnectionString(IConfiguration configuration)
             + "ConnectionStrings__DefaultConnection.");
     }
 
-    if (!connectionString.Contains("localhost", StringComparison.OrdinalIgnoreCase)
-        && !connectionString.Contains("127.0.0.1", StringComparison.OrdinalIgnoreCase))
+    NpgsqlConnectionStringBuilder parsedConnectionString;
+    try
     {
-        return connectionString;
+        parsedConnectionString = new NpgsqlConnectionStringBuilder(connectionString);
+    }
+    catch (ArgumentException ex)
+    {
+        throw new InvalidOperationException(
+            "Database connection string is invalid. On Render, use a single-line "
+            + "PostgreSQL URL or Npgsql connection string.",
+            ex);
+    }
+
+    if (!string.Equals(parsedConnectionString.Host, "localhost", StringComparison.OrdinalIgnoreCase)
+        && !string.Equals(parsedConnectionString.Host, "127.0.0.1", StringComparison.OrdinalIgnoreCase))
+    {
+        return parsedConnectionString.ConnectionString;
     }
 
     if (configuration["ASPNETCORE_ENVIRONMENT"] == Environments.Development)
-        return connectionString;
+        return parsedConnectionString.ConnectionString;
 
     throw new InvalidOperationException(
         "Production database cannot use localhost. Configure DATABASE_URL or "
@@ -192,6 +206,8 @@ static string GetDatabaseConnectionString(IConfiguration configuration)
 
 static string ConvertDatabaseUrl(string databaseUrl)
 {
+    databaseUrl = databaseUrl.Trim();
+
     if (!Uri.TryCreate(databaseUrl, UriKind.Absolute, out var uri)
         || (uri.Scheme != "postgres" && uri.Scheme != "postgresql"))
     {
@@ -213,4 +229,34 @@ static string ConvertDatabaseUrl(string databaseUrl)
     };
 
     return builder.ConnectionString;
+}
+
+static string? NormalizeConnectionString(string? value)
+{
+    if (string.IsNullOrWhiteSpace(value))
+        return value;
+
+    var normalized = value
+        .Replace("\\r", string.Empty, StringComparison.Ordinal)
+        .Replace("\\n", "\n", StringComparison.Ordinal)
+        .Trim();
+
+    if (!normalized.Contains('\r') && !normalized.Contains('\n'))
+        return normalized;
+
+    var parts = normalized
+        .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+        .Select(part => part.Trim())
+        .Where(part => part.Length > 0)
+        .ToArray();
+
+    if (normalized.StartsWith("postgres://", StringComparison.OrdinalIgnoreCase)
+        || normalized.StartsWith("postgresql://", StringComparison.OrdinalIgnoreCase))
+    {
+        return string.Concat(parts);
+    }
+
+    return string.Join(
+        ';',
+        parts.Select(part => part.Trim(';')).Where(part => part.Length > 0));
 }
