@@ -7,7 +7,7 @@ namespace nhom2.Api.Supplier;
 
 [ApiController]
 [Route("api/suppliers")]
-[Authorize(Roles = "WarehouseKeeper")]
+[Authorize(Roles = "Admin,WarehouseKeeper")]
 public class SupplierController : ControllerBase
 {
     private readonly ISupplierService _supplierService;
