@@ -8,16 +8,12 @@ namespace nhom2.Application.Services;
 public class PayOsClient
 {
     private readonly HttpClient _http;
-    private readonly string _clientId;
-    private readonly string _apiKey;
-    private readonly string _checksumKey;
+    private readonly IConfiguration _configuration;
 
     public PayOsClient(HttpClient http, IConfiguration configuration)
     {
         _http = http;
-        _clientId = GetRequired(configuration, "PayOS:ClientId");
-        _apiKey = GetRequired(configuration, "PayOS:ApiKey");
-        _checksumKey = GetRequired(configuration, "PayOS:ChecksumKey");
+        _configuration = configuration;
     }
 
     public async Task<string> CreatePaymentLinkAsync(
@@ -29,6 +25,8 @@ public class PayOsClient
         long expiredAt,
         IReadOnlyCollection<object> items)
     {
+        var clientId = GetRequired("PayOS:ClientId");
+        var apiKey = GetRequired("PayOS:ApiKey");
         var signatureData = new SortedDictionary<string, string>(StringComparer.Ordinal)
         {
             ["amount"] = amount.ToString(CultureInfo.InvariantCulture),
@@ -53,8 +51,8 @@ public class PayOsClient
         {
             Content = JsonContent.Create(payload)
         };
-        request.Headers.Add("x-client-id", _clientId);
-        request.Headers.Add("x-api-key", _apiKey);
+        request.Headers.Add("x-client-id", clientId);
+        request.Headers.Add("x-api-key", apiKey);
         using var response = await _http.SendAsync(request);
         var content = await response.Content.ReadAsStringAsync();
         response.EnsureSuccessStatusCode();
@@ -88,7 +86,8 @@ public class PayOsClient
 
     private string Sign(string value)
     {
-        using var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(_checksumKey));
+        var checksumKey = GetRequired("PayOS:ChecksumKey");
+        using var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(checksumKey));
         return Convert.ToHexString(hmac.ComputeHash(Encoding.UTF8.GetBytes(value))).ToLowerInvariant();
     }
 
@@ -101,9 +100,9 @@ public class PayOsClient
         _ => value.GetRawText()
     };
 
-    private static string GetRequired(IConfiguration configuration, string key)
+    private string GetRequired(string key)
     {
-        var value = configuration[key];
+        var value = _configuration[key];
         if (string.IsNullOrWhiteSpace(value) || value.StartsWith("CHANGE_ME", StringComparison.Ordinal))
             throw new InvalidOperationException($"{key} is not configured.");
         return value;
