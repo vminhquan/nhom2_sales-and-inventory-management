@@ -74,6 +74,37 @@ public class PayOsClient
             ?? throw new PayOsException("PayOS did not return checkoutUrl");
     }
 
+    public async Task<PayOsPaymentStatus> GetPaymentStatusAsync(long orderCode)
+    {
+        var clientId = GetRequired("PayOS:ClientId");
+        var apiKey = GetRequired("PayOS:ApiKey");
+
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get,
+            $"/v2/payment-requests/{orderCode}");
+        request.Headers.Add("x-client-id", clientId);
+        request.Headers.Add("x-api-key", apiKey);
+
+        using var response = await _http.SendAsync(request);
+        var content = await response.Content.ReadAsStringAsync();
+        response.EnsureSuccessStatusCode();
+
+        using var document = JsonDocument.Parse(content);
+        var root = document.RootElement;
+        if (root.GetProperty("code").GetString() != "00")
+            throw new PayOsException(
+                root.GetProperty("desc").GetString() ?? "PayOS rejected payment status request");
+
+        var data = root.GetProperty("data");
+        var status = data.GetProperty("status").GetString()
+            ?? throw new PayOsException("PayOS did not return payment status");
+        var reference = data.TryGetProperty("reference", out var referenceElement)
+            ? referenceElement.GetString()
+            : null;
+
+        return new PayOsPaymentStatus(status, reference);
+    }
+
     public bool VerifyWebhook(JsonElement payload)
     {
         if (!payload.TryGetProperty("data", out var data)
@@ -131,3 +162,5 @@ public class PayOsException : InvalidOperationException
     {
     }
 }
+
+public record PayOsPaymentStatus(string Status, string? Reference);

@@ -16,6 +16,7 @@ public class PaymentService : IPaymentService
     private readonly IProductClient _productClient;
     private readonly PayOsClient _payOs;
     private readonly IConfiguration _configuration;
+    private readonly ILogger<PaymentService> _logger;
 
     public PaymentService(
         ApplicationDbContext context,
@@ -23,7 +24,8 @@ public class PaymentService : IPaymentService
         ICustomer customerRepository,
         IProductClient productClient,
         PayOsClient payOs,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        ILogger<PaymentService> logger)
     {
         _context = context;
         _customerService = customerService;
@@ -31,6 +33,7 @@ public class PaymentService : IPaymentService
         _productClient = productClient;
         _payOs = payOs;
         _configuration = configuration;
+        _logger = logger;
     }
 
     public async Task<PaymentLinkResponseDto> CreatePaymentLinkAsync(CreatePaymentLinkDto dto)
@@ -129,7 +132,39 @@ public class PaymentService : IPaymentService
             payment.Order.LastModifiedAt = DateTime.UtcNow;
             await _context.SaveChangesAsync();
         }
-        return MapStatus(payment);
+
+        if (payment.Order.Status == OrderStatus.PendingPayment)
+        {
+            try
+            {
+                var payOsStatus = await _payOs.GetPaymentStatusAsync(orderCode);
+                if (payOsStatus.Status.Equals("PAID", StringComparison.OrdinalIgnoreCase))
+                {
+                    await CompletePaymentAsync(orderCode, payOsStatus.Reference);
+                }
+                else if (payOsStatus.Status.Equals("CANCELLED", StringComparison.OrdinalIgnoreCase))
+                {
+                    await CancelAsync(orderCode);
+                }
+
+                _context.ChangeTracker.Clear();
+                payment = await LoadAsync(orderCode);
+                if (payment is null)
+                    return null;
+            }
+            catch (Exception ex) when (ex is HttpRequestException
+                or PayOsException
+                or PayOsConfigurationException
+                or JsonException)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Could not reconcile PayOS status for order code {OrderCode}.",
+                    orderCode);
+            }
+        }
+
+        return payment is null ? null : MapStatus(payment);
     }
 
     public async Task CancelAsync(long orderCode)
@@ -151,7 +186,15 @@ public class PaymentService : IPaymentService
         if (data.GetProperty("code").GetString() != "00")
             return;
         var orderCode = data.GetProperty("orderCode").GetInt64();
+        var reference = data.TryGetProperty("reference", out var referenceElement)
+            ? referenceElement.GetString()
+            : null;
 
+        await CompletePaymentAsync(orderCode, reference);
+    }
+
+    private async Task CompletePaymentAsync(long orderCode, string? reference)
+    {
         await using var transaction = await _context.Database
             .BeginTransactionAsync(IsolationLevel.Serializable);
         var payment = await LoadAsync(orderCode)
@@ -212,9 +255,7 @@ public class PaymentService : IPaymentService
         payment.Order.AmountPaid = payment.Order.TotalAmount;
         payment.Order.LastModifiedAt = DateTime.UtcNow;
         payment.CompletedAt = DateTime.UtcNow;
-        payment.PayOsTransactionReference = data.TryGetProperty("reference", out var reference)
-            ? reference.GetString()
-            : null;
+        payment.PayOsTransactionReference = reference;
         await _context.SaveChangesAsync();
         await transaction.CommitAsync();
     }
