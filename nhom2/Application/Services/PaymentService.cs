@@ -36,6 +36,10 @@ public class PaymentService : IPaymentService
     public async Task<PaymentLinkResponseDto> CreatePaymentLinkAsync(CreatePaymentLinkDto dto)
     {
         Validate(dto);
+        _payOs.EnsureConfigured();
+        _ = GetRequired("Checkout:FrontendBaseUrl");
+        _ = GetRequired("Checkout:BackendBaseUrl");
+
         var requestedItems = dto.OrderItems
             .GroupBy(item => item.ProductId)
             .Select(group => new OrderItemDto

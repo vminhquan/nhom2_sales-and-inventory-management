@@ -12,11 +12,16 @@ public class PaymentController : ControllerBase
 {
     private readonly IPaymentService _paymentService;
     private readonly IConfiguration _configuration;
+    private readonly ILogger<PaymentController> _logger;
 
-    public PaymentController(IPaymentService paymentService, IConfiguration configuration)
+    public PaymentController(
+        IPaymentService paymentService,
+        IConfiguration configuration,
+        ILogger<PaymentController> logger)
     {
         _paymentService = paymentService;
         _configuration = configuration;
+        _logger = logger;
     }
 
     [HttpPost("links")]
@@ -35,12 +40,31 @@ public class PaymentController : ControllerBase
         {
             return NotFound(new { success = false, message = ex.Message });
         }
+        catch (PayOsConfigurationException ex)
+        {
+            _logger.LogError(ex, "PayOS configuration is incomplete.");
+            return StatusCode(503, new
+            {
+                success = false,
+                message = "Hệ thống thanh toán chưa được cấu hình đầy đủ."
+            });
+        }
+        catch (PayOsException ex)
+        {
+            _logger.LogError(ex, "PayOS rejected the payment link request.");
+            return StatusCode(502, new
+            {
+                success = false,
+                message = $"PayOS không thể tạo liên kết thanh toán: {ex.Message}"
+            });
+        }
         catch (InvalidOperationException ex)
         {
             return Conflict(new { success = false, message = ex.Message });
         }
         catch (HttpRequestException ex)
         {
+            _logger.LogError(ex, "Unable to call PayOS.");
             return StatusCode(503, new { success = false, message = ex.Message });
         }
     }

@@ -16,6 +16,13 @@ public class PayOsClient
         _configuration = configuration;
     }
 
+    public void EnsureConfigured()
+    {
+        _ = GetRequired("PayOS:ClientId");
+        _ = GetRequired("PayOS:ApiKey");
+        _ = GetRequired("PayOS:ChecksumKey");
+    }
+
     public async Task<string> CreatePaymentLinkAsync(
         long orderCode,
         int amount,
@@ -60,10 +67,11 @@ public class PayOsClient
         using var document = JsonDocument.Parse(content);
         var root = document.RootElement;
         if (root.GetProperty("code").GetString() != "00")
-            throw new InvalidOperationException(root.GetProperty("desc").GetString() ?? "PayOS rejected payment");
+            throw new PayOsException(
+                root.GetProperty("desc").GetString() ?? "PayOS rejected payment");
 
         return root.GetProperty("data").GetProperty("checkoutUrl").GetString()
-            ?? throw new InvalidOperationException("PayOS did not return checkoutUrl");
+            ?? throw new PayOsException("PayOS did not return checkoutUrl");
     }
 
     public bool VerifyWebhook(JsonElement payload)
@@ -104,7 +112,22 @@ public class PayOsClient
     {
         var value = _configuration[key];
         if (string.IsNullOrWhiteSpace(value) || value.StartsWith("CHANGE_ME", StringComparison.Ordinal))
-            throw new InvalidOperationException($"{key} is not configured.");
+            throw new PayOsConfigurationException(
+                $"{key} is not configured. Configure the corresponding PayOS__ environment variable.");
         return value;
+    }
+}
+
+public class PayOsConfigurationException : InvalidOperationException
+{
+    public PayOsConfigurationException(string message) : base(message)
+    {
+    }
+}
+
+public class PayOsException : InvalidOperationException
+{
+    public PayOsException(string message) : base(message)
+    {
     }
 }
