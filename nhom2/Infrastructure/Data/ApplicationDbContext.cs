@@ -11,6 +11,7 @@ namespace nhom2.Infrastructure.Data
         public DbSet<OrderItem> OrderItems { get; set; }
         public DbSet<Customer> Customers { get; set; }
         public DbSet<Supplier> Suppliers { get; set; }
+        public DbSet<PaymentTransaction> PaymentTransactions { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -36,6 +37,16 @@ namespace nhom2.Infrastructure.Data
             modelBuilder.Entity<Order>()
                 .Property(order => order.AmountPaid)
                 .HasPrecision(18, 2);
+
+            modelBuilder.Entity<PaymentTransaction>()
+                .HasOne(payment => payment.Order)
+                .WithOne(order => order.Payment)
+                .HasForeignKey<PaymentTransaction>(payment => payment.OrderId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<PaymentTransaction>()
+                .HasIndex(payment => payment.OrderCode)
+                .IsUnique();
 
             modelBuilder.Entity<OrderItem>()
                 .Property(item => item.Price)

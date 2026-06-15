@@ -7,10 +7,12 @@ namespace nhom2.Application.Services;
 public class SupplierService : ISupplierService
 {
     private readonly ISupplier _supplierRepository;
+    private readonly IProductClient _productClient;
 
-    public SupplierService(ISupplier supplierRepository)
+    public SupplierService(ISupplier supplierRepository, IProductClient productClient)
     {
         _supplierRepository = supplierRepository;
+        _productClient = productClient;
     }
 
     public async Task<List<SupplierResponseDto>> GetAllAsync()
@@ -64,6 +66,10 @@ public class SupplierService : ISupplierService
     {
         var supplier = await _supplierRepository.GetByIdAsync(id)
             ?? throw new KeyNotFoundException($"Không tìm thấy Supplier với ID {id}");
+
+        if (await _productClient.HasProductsForSupplierAsync(id))
+            throw new InvalidOperationException("Không thể xóa nhà cung cấp đang có sản phẩm");
+
         await _supplierRepository.DeleteAsync(supplier);
     }
 

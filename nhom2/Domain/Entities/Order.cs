@@ -14,6 +14,7 @@ namespace nhom2.Domain.Entities
         public decimal AmountPaid { get; set; }
         public Customer? Customer { get; set; }
         public List<OrderItem> OrderItems { get; set; } = new();
+        public PaymentTransaction? Payment { get; set; }
 
         [NotMapped]
         public decimal Subtotal => OrderItems.Sum(item => item.SubTotal);

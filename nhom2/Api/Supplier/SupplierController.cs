@@ -7,7 +7,7 @@ namespace nhom2.Api.Supplier;
 
 [ApiController]
 [Route("api/suppliers")]
-[Authorize(Roles = "Admin,SalesStaff,WarehouseKeeper")]
+[Authorize(Roles = "WarehouseKeeper")]
 public class SupplierController : ControllerBase
 {
     private readonly ISupplierService _supplierService;
@@ -33,7 +33,6 @@ public class SupplierController : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = "Admin,SalesStaff")]
     public async Task<IActionResult> Create(CreateSupplierDto dto)
     {
         try
@@ -49,7 +48,6 @@ public class SupplierController : ControllerBase
     }
 
     [HttpPut("{id:int}")]
-    [Authorize(Roles = "Admin,SalesStaff")]
     public async Task<IActionResult> Update(int id, UpdateSupplierDto dto)
     {
         try
@@ -68,7 +66,6 @@ public class SupplierController : ControllerBase
     }
 
     [HttpDelete("{id:int}")]
-    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> Delete(int id)
     {
         try
@@ -79,6 +76,10 @@ public class SupplierController : ControllerBase
         catch (KeyNotFoundException ex)
         {
             return NotFound(new { success = false, message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Conflict(new { success = false, message = ex.Message });
         }
     }
 }

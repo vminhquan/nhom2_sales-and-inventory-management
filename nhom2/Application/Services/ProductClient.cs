@@ -74,6 +74,19 @@ public class ProductClient : IProductClient
         response.EnsureSuccessStatusCode();
     }
 
+    public async Task<bool> HasProductsForSupplierAsync(int supplierId)
+    {
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get, $"/api/internal/products/has-supplier/{supplierId}");
+        request.Headers.Add("X-Internal-Api-Key", _internalApiKey);
+        using var response = await _http.SendAsync(request);
+        response.EnsureSuccessStatusCode();
+
+        var content = await response.Content.ReadAsStringAsync();
+        using var document = JsonDocument.Parse(content);
+        return document.RootElement.GetProperty("hasProducts").GetBoolean();
+    }
+
     private static async Task<T?> ReadAsync<T>(HttpResponseMessage response)
         where T : class
     {

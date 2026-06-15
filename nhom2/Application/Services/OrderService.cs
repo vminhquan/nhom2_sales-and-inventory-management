@@ -355,6 +355,12 @@ public class OrderService : IOrderService
             OrderStatus.Pending => newStatus is OrderStatus.Processing
                 or OrderStatus.Shipped
                 or OrderStatus.Cancelled,
+            OrderStatus.PendingPayment => false,
+            OrderStatus.ProcessingPayment => false,
+            OrderStatus.Paid => newStatus is OrderStatus.Processing or OrderStatus.Cancelled,
+            OrderStatus.PaymentCancelled => false,
+            OrderStatus.PaymentExpired => false,
+            OrderStatus.PaymentFailed => false,
             OrderStatus.Processing => newStatus is OrderStatus.Shipped or OrderStatus.Cancelled,
             OrderStatus.Shipped => newStatus is OrderStatus.Completed or OrderStatus.Cancelled,
             OrderStatus.Completed => false,

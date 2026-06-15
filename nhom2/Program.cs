@@ -25,6 +25,14 @@ builder.Services.AddScoped<ISupplier, SupplierRepo>();
 builder.Services.AddScoped<IOrderService, OrderService>();
 builder.Services.AddScoped<ICustomerService, CustomerService>();
 builder.Services.AddScoped<ISupplierService, SupplierService>();
+builder.Services.AddScoped<IPaymentService, PaymentService>();
+builder.Services.AddHostedService<PaymentExpirationWorker>();
+
+builder.Services.AddHttpClient<PayOsClient>(client =>
+{
+    client.BaseAddress = new Uri("https://api-merchant.payos.vn");
+    client.Timeout = TimeSpan.FromSeconds(20);
+});
 
 builder.Services.AddHttpClient<IUserClient, UserClient>(client =>
 {

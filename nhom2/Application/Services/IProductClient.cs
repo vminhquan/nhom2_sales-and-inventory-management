@@ -8,4 +8,5 @@ public interface IProductClient
     Task<ProductDto?> GetProductByIdAsync(int id);
     Task<ReserveStockResponse> ReserveStockAsync(ReserveStockRequest request);
     Task ReleaseStockAsync(int productId, int quantity);
+    Task<bool> HasProductsForSupplierAsync(int supplierId);
 }
