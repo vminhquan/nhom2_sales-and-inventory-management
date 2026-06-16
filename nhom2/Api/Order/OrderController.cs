@@ -5,12 +5,14 @@ using nhom2.Application.Services;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
 
 namespace nhom2.Api.Order
 {
     [ApiController]
     [Route("api/[controller]")]
-    [Authorize(Roles = "Admin,SalesStaff")]
+    [Authorize]
     public class OrderController : ControllerBase
     {
         private readonly IOrderService _orderService;
@@ -21,6 +23,7 @@ namespace nhom2.Api.Order
         }
 
         [HttpGet]
+        [Authorize(Roles = "Admin,SalesStaff")]
         public async Task<IActionResult> GetAllOrders()
         {
             try
@@ -35,6 +38,7 @@ namespace nhom2.Api.Order
         }
 
         [HttpGet("{id}")]
+        [Authorize(Roles = "Admin,SalesStaff")]
         public async Task<IActionResult> GetOrderById(int id)
         {
             try
@@ -52,6 +56,7 @@ namespace nhom2.Api.Order
         }
 
         [HttpGet("user/{userId}")]
+        [Authorize(Roles = "Admin,SalesStaff")]
         public async Task<IActionResult> GetOrdersByUserId(int userId)
         {
             try
@@ -65,7 +70,21 @@ namespace nhom2.Api.Order
             }
         }
 
+        [HttpGet("my-purchases")]
+        [Authorize(Roles = "Customer")]
+        public async Task<IActionResult> GetMyPurchases()
+        {
+            var email = User.FindFirstValue(ClaimTypes.Email)
+                ?? User.FindFirstValue(JwtRegisteredClaimNames.Email);
+            if (string.IsNullOrWhiteSpace(email))
+                return Unauthorized(new { success = false, message = "JWT khong chua email hop le" });
+
+            var orders = await _orderService.GetOrdersByCustomerEmailAsync(email);
+            return Ok(new { success = true, data = orders });
+        }
+
         [HttpPost]
+        [Authorize(Roles = "Admin,SalesStaff")]
         public async Task<IActionResult> CreateOrder([FromBody] CreateOrderDto createOrderDto)
         {
             try
@@ -100,6 +119,7 @@ namespace nhom2.Api.Order
         }
 
         [HttpPut("{id}")]
+        [Authorize(Roles = "Admin,SalesStaff")]
         public async Task<IActionResult> UpdateOrder(int id, [FromBody] UpdateOrderDto updateOrderDto)
         {
             try
@@ -136,6 +156,7 @@ namespace nhom2.Api.Order
         }
 
         [HttpPut("{id}/status")]
+        [Authorize(Roles = "Admin,SalesStaff")]
         public async Task<IActionResult> UpdateOrderStatus(int id, [FromBody] UpdateOrderStatusDto updateOrderStatusDto)
         {
             try
@@ -172,6 +193,7 @@ namespace nhom2.Api.Order
         }
 
         [HttpDelete("{id}")]
+        [Authorize(Roles = "Admin,SalesStaff")]
         public async Task<IActionResult> DeleteOrder(int id)
         {
             try

@@ -46,6 +46,19 @@ namespace nhom2.Infrastructure.Repositories
                 .ToListAsync();
         }
 
+        public async Task<List<Order>> GetAllOrdersByCustomerEmail(string email)
+        {
+            var normalizedEmail = email.Trim().ToLower();
+            return await _context.Orders
+                .Include(o => o.OrderItems)
+                .Include(o => o.Customer)
+                .Where(o => o.Customer != null
+                    && o.Customer.Email != null
+                    && o.Customer.Email.ToLower() == normalizedEmail)
+                .OrderByDescending(o => o.CreatedAt)
+                .ToListAsync();
+        }
+
         public async Task<List<Order>> GetAllOrders()
         {
             return await _context.Orders

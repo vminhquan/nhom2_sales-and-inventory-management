@@ -14,6 +14,7 @@ public class PaymentService : IPaymentService
     private readonly ICustomerService _customerService;
     private readonly ICustomer _customerRepository;
     private readonly IProductClient _productClient;
+    private readonly IUserClient _userClient;
     private readonly PayOsClient _payOs;
     private readonly IConfiguration _configuration;
     private readonly ILogger<PaymentService> _logger;
@@ -23,6 +24,7 @@ public class PaymentService : IPaymentService
         ICustomerService customerService,
         ICustomer customerRepository,
         IProductClient productClient,
+        IUserClient userClient,
         PayOsClient payOs,
         IConfiguration configuration,
         ILogger<PaymentService> logger)
@@ -31,6 +33,7 @@ public class PaymentService : IPaymentService
         _customerService = customerService;
         _customerRepository = customerRepository;
         _productClient = productClient;
+        _userClient = userClient;
         _payOs = payOs;
         _configuration = configuration;
         _logger = logger;
@@ -52,6 +55,7 @@ public class PaymentService : IPaymentService
             })
             .ToList();
         var orderItems = new List<OrderItem>();
+        var totalQuantity = requestedItems.Sum(item => item.Quantity);
         foreach (var item in requestedItems)
         {
             var product = await _productClient.GetProductByIdAsync(item.ProductId)
@@ -66,6 +70,9 @@ public class PaymentService : IPaymentService
         }
 
         var customer = await GetOrCreateCustomerAsync(dto);
+        var membership = !string.IsNullOrWhiteSpace(customer.Email)
+            ? await _userClient.GetCustomerMembershipByEmailAsync(customer.Email)
+            : null;
         var systemUserId = _configuration.GetValue<int?>("Checkout:SystemUserId")
             ?? throw new InvalidOperationException("Checkout:SystemUserId is not configured.");
         var order = new Order
@@ -75,6 +82,7 @@ public class PaymentService : IPaymentService
             Customer = customer,
             CreatedAt = DateTime.UtcNow,
             Status = OrderStatus.PendingPayment,
+            DiscountAmount = CalculateMemberDiscount(orderItems, totalQuantity, membership),
             OrderItems = orderItems
         };
         _context.Orders.Add(order);
@@ -258,6 +266,18 @@ public class PaymentService : IPaymentService
         payment.PayOsTransactionReference = reference;
         await _context.SaveChangesAsync();
         await transaction.CommitAsync();
+
+        if (!string.IsNullOrWhiteSpace(payment.Order.Customer?.Email))
+        {
+            try
+            {
+                await _userClient.NotifyPaidOrderAsync(payment.Order.Customer.Email, payment.Order.Id);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Could not update customer tier for order {OrderId}.", payment.Order.Id);
+            }
+        }
     }
 
     public async Task ExpirePendingPaymentsAsync(CancellationToken cancellationToken)
@@ -295,8 +315,22 @@ public class PaymentService : IPaymentService
     private Task<PaymentTransaction?> LoadAsync(long orderCode) =>
         _context.PaymentTransactions
             .Include(payment => payment.Order)
+            .ThenInclude(order => order.Customer)
+            .Include(payment => payment.Order)
             .ThenInclude(order => order.OrderItems)
             .FirstOrDefaultAsync(payment => payment.OrderCode == orderCode);
+
+    private static decimal CalculateMemberDiscount(
+        IReadOnlyCollection<OrderItem> orderItems,
+        int totalQuantity,
+        CustomerMembershipDto? membership)
+    {
+        if (totalQuantity < 3 || membership is null || membership.DiscountPercent <= 0)
+            return 0;
+
+        var subtotal = orderItems.Sum(item => item.SubTotal);
+        return Math.Round(subtotal * membership.DiscountPercent / 100m, 0);
+    }
 
     private static void Validate(CreatePaymentLinkDto dto)
     {

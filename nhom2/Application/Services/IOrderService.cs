@@ -10,6 +10,7 @@ namespace nhom2.Application.Services
         Task<List<OrderResponseDto>> GetAllOrdersAsync();
         Task<OrderResponseDto?> GetOrderByIdAsync(int id);
         Task<List<OrderResponseDto>> GetOrdersByUserIdAsync(int userId);
+        Task<List<OrderResponseDto>> GetOrdersByCustomerEmailAsync(string email);
         Task<OrderResponseDto> CreateOrderAsync(CreateOrderDto createOrderDto);
         Task<OrderResponseDto> UpdateOrderAsync(UpdateOrderDto updateOrderDto);
         Task<OrderResponseDto> UpdateOrderStatusAsync(UpdateOrderStatusDto updateOrderStatusDto);

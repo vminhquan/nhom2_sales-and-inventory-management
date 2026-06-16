@@ -5,6 +5,8 @@ namespace nhom2.Application.DTOs
         public int Id { get; set; }
         public string Name { get; set; } = string.Empty;
         public decimal SellingPrice { get; set; }
+        public decimal OriginalPrice { get; set; }
+        public decimal? SalePrice { get; set; }
         public string CategoryName { get; set; } = string.Empty;
         public int Quantity { get; set; }
         public int ReserveStock { get; set; }
@@ -29,5 +31,15 @@ namespace nhom2.Application.DTOs
         public int ProductId { get; set; }
         public int Quantity { get; set; }
         public int ReserveStock { get; set; }
+    }
+
+    public class CustomerMembershipDto
+    {
+        public int UserId { get; set; }
+        public string Email { get; set; } = string.Empty;
+        public int PaidOrderCount { get; set; }
+        public string Tier { get; set; } = "Regular";
+        public string TierLabel { get; set; } = "Thành viên thường";
+        public decimal DiscountPercent { get; set; }
     }
 }

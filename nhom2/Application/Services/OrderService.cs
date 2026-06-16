@@ -42,6 +42,14 @@ public class OrderService : IOrderService
         return (await _orderRepository.GetAllOrdersByUserId(userId)).Select(MapToDto).ToList();
     }
 
+    public async Task<List<OrderResponseDto>> GetOrdersByCustomerEmailAsync(string email)
+    {
+        if (string.IsNullOrWhiteSpace(email))
+            throw new ArgumentException("Email khong hop le");
+
+        return (await _orderRepository.GetAllOrdersByCustomerEmail(email)).Select(MapToDto).ToList();
+    }
+
     public async Task<OrderResponseDto> CreateOrderAsync(CreateOrderDto dto)
     {
         ValidateOrderInput(dto.UserId, dto.OrderItems, dto.DiscountAmount, dto.AmountPaid);

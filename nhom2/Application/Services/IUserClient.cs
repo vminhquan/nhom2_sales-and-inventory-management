@@ -8,5 +8,7 @@ namespace nhom2.Application.Services
     {
         Task<UserDto?> GetUserByIdAsync(int id);
         Task<List<UserDto>> GetUsersAsync();
+        Task<CustomerMembershipDto?> GetCustomerMembershipByEmailAsync(string email);
+        Task NotifyPaidOrderAsync(string email, int orderId);
     }
 }

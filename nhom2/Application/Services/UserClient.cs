@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Net;
+using System.Net.Http.Json;
 using System.Text.Json;
 using nhom2.Application.DTOs;
 
@@ -40,6 +41,39 @@ public class UserClient : IUserClient
         var response = await _http.SendAsync(request);
         response.EnsureSuccessStatusCode();
         return await ReadUserListAsync(response);
+    }
+
+    public async Task<CustomerMembershipDto?> GetCustomerMembershipByEmailAsync(string email)
+    {
+        if (string.IsNullOrWhiteSpace(email))
+            return null;
+
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get,
+            $"/api/internal/customers/membership?email={Uri.EscapeDataString(email)}");
+        request.Headers.Add("X-Internal-Api-Key", _internalApiKey);
+        var response = await _http.SendAsync(request);
+        if (response.StatusCode == HttpStatusCode.NotFound)
+            return null;
+
+        response.EnsureSuccessStatusCode();
+        var content = await response.Content.ReadAsStringAsync();
+        var wrapped = JsonSerializer.Deserialize<ApiResponse<CustomerMembershipDto>>(content, JsonOptions);
+        return wrapped?.Data ?? JsonSerializer.Deserialize<CustomerMembershipDto>(content, JsonOptions);
+    }
+
+    public async Task NotifyPaidOrderAsync(string email, int orderId)
+    {
+        if (string.IsNullOrWhiteSpace(email))
+            return;
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/internal/customers/paid-order")
+        {
+            Content = JsonContent.Create(new { email, orderId })
+        };
+        request.Headers.Add("X-Internal-Api-Key", _internalApiKey);
+        using var response = await _http.SendAsync(request);
+        response.EnsureSuccessStatusCode();
     }
 
     private static async Task<UserDto?> ReadUserAsync(HttpResponseMessage response)
