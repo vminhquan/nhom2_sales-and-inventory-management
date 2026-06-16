@@ -74,10 +74,19 @@ namespace nhom2.Api.Order
         [Authorize(Roles = "Customer")]
         public async Task<IActionResult> GetMyPurchases()
         {
+            var idValue = User.FindFirstValue(ClaimTypes.NameIdentifier)
+                ?? User.FindFirstValue(JwtRegisteredClaimNames.Sub);
+            if (int.TryParse(idValue, out var userId))
+            {
+                var ownOrders = await _orderService.GetOrdersByUserIdAsync(userId);
+                if (ownOrders.Count > 0)
+                    return Ok(new { success = true, data = ownOrders });
+            }
+
             var email = User.FindFirstValue(ClaimTypes.Email)
                 ?? User.FindFirstValue(JwtRegisteredClaimNames.Email);
             if (string.IsNullOrWhiteSpace(email))
-                return Unauthorized(new { success = false, message = "JWT khong chua email hop le" });
+                return Unauthorized(new { success = false, message = "JWT không chứa email hợp lệ" });
 
             var orders = await _orderService.GetOrdersByCustomerEmailAsync(email);
             return Ok(new { success = true, data = orders });

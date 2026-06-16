@@ -59,9 +59,9 @@ public class PaymentService : IPaymentService
         foreach (var item in requestedItems)
         {
             var product = await _productClient.GetProductByIdAsync(item.ProductId)
-                ?? throw new KeyNotFoundException($"Product {item.ProductId} khong ton tai");
+                ?? throw new KeyNotFoundException($"Product {item.ProductId} không tồn tại");
             if (product.Quantity < item.Quantity)
-                throw new InvalidOperationException($"San pham {product.Name} khong du ton kho");
+                throw new InvalidOperationException($"Sản phẩm {product.Name} không đủ tồn kho");
             orderItems.Add(new OrderItem(item.Quantity, product.SellingPrice)
             {
                 ProductId = product.Id,
@@ -77,7 +77,7 @@ public class PaymentService : IPaymentService
             ?? throw new InvalidOperationException("Checkout:SystemUserId is not configured.");
         var order = new Order
         {
-            UserId = systemUserId,
+            UserId = dto.AuthenticatedCustomerUserId ?? systemUserId,
             CustomerId = customer.Id,
             Customer = customer,
             CreatedAt = DateTime.UtcNow,
@@ -188,7 +188,7 @@ public class PaymentService : IPaymentService
     public async Task HandleWebhookAsync(JsonElement payload)
     {
         if (!_payOs.VerifyWebhook(payload))
-            throw new UnauthorizedAccessException("Chu ky webhook PayOS khong hop le");
+            throw new UnauthorizedAccessException("Chữ ký webhook PayOS không hợp lệ");
 
         var data = payload.GetProperty("data");
         if (data.GetProperty("code").GetString() != "00")
@@ -206,7 +206,7 @@ public class PaymentService : IPaymentService
         await using var transaction = await _context.Database
             .BeginTransactionAsync(IsolationLevel.Serializable);
         var payment = await LoadAsync(orderCode)
-            ?? throw new KeyNotFoundException("Khong tim thay payment");
+            ?? throw new KeyNotFoundException("Không tìm thấy payment");
         if (payment.Order.Status == OrderStatus.Paid)
         {
             await transaction.CommitAsync();
@@ -298,6 +298,47 @@ public class PaymentService : IPaymentService
 
     private async Task<Customer> GetOrCreateCustomerAsync(CreatePaymentLinkDto dto)
     {
+        if (!string.IsNullOrWhiteSpace(dto.AuthenticatedCustomerEmail))
+        {
+            var normalizedEmail = dto.AuthenticatedCustomerEmail.Trim().ToLower();
+            var existingByEmail = await _context.Customers
+                .FirstOrDefaultAsync(customer => customer.Email != null
+                    && customer.Email.ToLower() == normalizedEmail);
+            if (existingByEmail is not null)
+            {
+                existingByEmail.FullName = dto.FullName.Trim();
+                existingByEmail.Phone = dto.Phone.Trim();
+                existingByEmail.Email = dto.AuthenticatedCustomerEmail.Trim();
+                existingByEmail.Address = dto.Address.Trim();
+                existingByEmail.LastModifiedAt = DateTime.UtcNow;
+                await _context.SaveChangesAsync();
+                return existingByEmail;
+            }
+
+            var existingByPhone = await _customerRepository.GetByPhoneAsync(dto.Phone.Trim());
+            if (existingByPhone is not null)
+            {
+                existingByPhone.FullName = dto.FullName.Trim();
+                existingByPhone.Email = dto.AuthenticatedCustomerEmail.Trim();
+                existingByPhone.Address = dto.Address.Trim();
+                existingByPhone.LastModifiedAt = DateTime.UtcNow;
+                await _context.SaveChangesAsync();
+                return existingByPhone;
+            }
+
+            var customerForAccount = new Customer
+            {
+                FullName = dto.FullName.Trim(),
+                Phone = dto.Phone.Trim(),
+                Email = dto.AuthenticatedCustomerEmail.Trim(),
+                Address = dto.Address.Trim(),
+                CreatedAt = DateTime.UtcNow
+            };
+            _context.Customers.Add(customerForAccount);
+            await _context.SaveChangesAsync();
+            return customerForAccount;
+        }
+
         var customer = await _customerRepository.GetByPhoneAsync(dto.Phone.Trim());
         if (customer is not null)
             return customer;
@@ -309,7 +350,7 @@ public class PaymentService : IPaymentService
             Address = dto.Address
         });
         return await _customerRepository.GetByIdAsync(created.Id)
-            ?? throw new InvalidOperationException("Khong the tao khach hang");
+            ?? throw new InvalidOperationException("Không thể tạo khách hàng");
     }
 
     private Task<PaymentTransaction?> LoadAsync(long orderCode) =>
@@ -339,7 +380,7 @@ public class PaymentService : IPaymentService
             || string.IsNullOrWhiteSpace(dto.Address)
             || dto.OrderItems.Count == 0
             || dto.OrderItems.Any(item => item.ProductId <= 0 || item.Quantity <= 0))
-            throw new ArgumentException("Thong tin dat hang khong hop le");
+            throw new ArgumentException("Thông tin đặt hàng không hợp lệ");
     }
 
     private string GetRequired(string key)

@@ -1,4 +1,6 @@
 using System.Text.Json;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using nhom2.Application.DTOs;
@@ -30,6 +32,7 @@ public class PaymentController : ControllerBase
     {
         try
         {
+            ApplyAuthenticatedCustomer(dto);
             return Ok(new { success = true, data = await _paymentService.CreatePaymentLinkAsync(dto) });
         }
         catch (ArgumentException ex)
@@ -69,13 +72,32 @@ public class PaymentController : ControllerBase
         }
     }
 
+    private void ApplyAuthenticatedCustomer(CreatePaymentLinkDto dto)
+    {
+        if (User.Identity?.IsAuthenticated != true || !User.IsInRole("Customer"))
+            return;
+
+        var idValue = User.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? User.FindFirstValue(JwtRegisteredClaimNames.Sub);
+        if (int.TryParse(idValue, out var userId))
+            dto.AuthenticatedCustomerUserId = userId;
+
+        var email = User.FindFirstValue(ClaimTypes.Email)
+            ?? User.FindFirstValue(JwtRegisteredClaimNames.Email);
+        if (!string.IsNullOrWhiteSpace(email))
+        {
+            dto.AuthenticatedCustomerEmail = email.Trim();
+            dto.Email = email.Trim();
+        }
+    }
+
     [HttpGet("{orderCode:long}")]
     [AllowAnonymous]
     public async Task<IActionResult> GetStatus(long orderCode)
     {
         var status = await _paymentService.GetStatusAsync(orderCode);
         return status is null
-            ? NotFound(new { success = false, message = "Khong tim thay payment" })
+            ? NotFound(new { success = false, message = "Không tìm thấy payment" })
             : Ok(new { success = true, data = status });
     }
 

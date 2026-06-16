@@ -45,7 +45,7 @@ public class OrderService : IOrderService
     public async Task<List<OrderResponseDto>> GetOrdersByCustomerEmailAsync(string email)
     {
         if (string.IsNullOrWhiteSpace(email))
-            throw new ArgumentException("Email khong hop le");
+            throw new ArgumentException("Email không hợp lệ");
 
         return (await _orderRepository.GetAllOrdersByCustomerEmail(email)).Select(MapToDto).ToList();
     }

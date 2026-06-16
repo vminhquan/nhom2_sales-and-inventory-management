@@ -1,5 +1,7 @@
 namespace nhom2.Application.DTOs;
 
+using System.Text.Json.Serialization;
+
 public class CreatePaymentLinkDto
 {
     public string FullName { get; set; } = string.Empty;
@@ -7,6 +9,12 @@ public class CreatePaymentLinkDto
     public string? Email { get; set; }
     public string Address { get; set; } = string.Empty;
     public List<OrderItemDto> OrderItems { get; set; } = new();
+
+    [JsonIgnore]
+    public int? AuthenticatedCustomerUserId { get; set; }
+
+    [JsonIgnore]
+    public string? AuthenticatedCustomerEmail { get; set; }
 }
 
 public class PaymentLinkResponseDto
