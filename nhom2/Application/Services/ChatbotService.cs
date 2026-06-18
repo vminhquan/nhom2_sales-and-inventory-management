@@ -21,6 +21,7 @@ public class ChatbotService : IChatbotService
     private readonly IUserClient _userClient;
     private readonly HttpClient _http;
     private readonly IConfiguration _configuration;
+    private readonly ILogger<ChatbotService> _logger;
 
     public ChatbotService(
         IChatSession chatRepository,
@@ -28,7 +29,8 @@ public class ChatbotService : IChatbotService
         IOrderService orderService,
         IUserClient userClient,
         HttpClient http,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        ILogger<ChatbotService> logger)
     {
         _chatRepository = chatRepository;
         _productClient = productClient;
@@ -36,6 +38,7 @@ public class ChatbotService : IChatbotService
         _userClient = userClient;
         _http = http;
         _configuration = configuration;
+        _logger = logger;
     }
 
     public async Task<ChatSessionDto> GetSessionAsync(int customerUserId, string? customerEmail)
@@ -128,7 +131,15 @@ public class ChatbotService : IChatbotService
         using var response = await _http.SendAsync(request);
         var content = await response.Content.ReadAsStringAsync();
         if (!response.IsSuccessStatusCode)
-            throw new InvalidOperationException($"OpenAI API error: {response.StatusCode}");
+        {
+            var message = GetOpenAiErrorMessage(content);
+            _logger.LogWarning(
+                "OpenAI API returned {StatusCode}. Message: {Message}",
+                (int)response.StatusCode,
+                message);
+            throw new InvalidOperationException(
+                $"OpenAI API error: {(int)response.StatusCode} {response.StatusCode}. {message}");
+        }
 
         using var document = JsonDocument.Parse(content);
         return document.RootElement
@@ -216,4 +227,26 @@ public class ChatbotService : IChatbotService
         Content = message.Content,
         CreatedAt = message.CreatedAt
     };
+
+    private static string GetOpenAiErrorMessage(string content)
+    {
+        if (string.IsNullOrWhiteSpace(content))
+            return "OpenAI không trả về nội dung lỗi.";
+
+        try
+        {
+            using var document = JsonDocument.Parse(content);
+            if (document.RootElement.TryGetProperty("error", out var error))
+            {
+                if (error.TryGetProperty("message", out var message))
+                    return message.GetString() ?? "OpenAI trả về lỗi không có message.";
+            }
+        }
+        catch
+        {
+            // Use the short raw body below.
+        }
+
+        return content.Length > 300 ? content[..300] : content;
+    }
 }

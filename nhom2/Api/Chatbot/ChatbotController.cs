@@ -56,7 +56,7 @@ public class ChatbotController : ControllerBase
                 return StatusCode(503, new
                 {
                     success = false,
-                    message = "Chatbot chưa gọi được OpenAI API. Vui lòng kiểm tra OPENAI_API_KEY trên server."
+                    message = $"Chatbot chưa gọi được OpenAI API. {ex.Message}"
                 });
             }
 
