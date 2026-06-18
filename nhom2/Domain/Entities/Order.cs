@@ -10,6 +10,7 @@ namespace nhom2.Domain.Entities
         public DateTime CreatedAt { get; set; }
         public DateTime? LastModifiedAt { get; set; }
         public OrderStatus Status { get; set; } = OrderStatus.Pending;
+        public OrderPaymentMethod PaymentMethod { get; set; } = OrderPaymentMethod.Cash;
         public decimal DiscountAmount { get; set; }
         public decimal AmountPaid { get; set; }
         public Customer? Customer { get; set; }

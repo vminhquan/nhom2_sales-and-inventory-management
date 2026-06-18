@@ -45,6 +45,7 @@ namespace nhom2.Application.DTOs
         public int? CustomerId { get; set; }
         public string? CustomerName { get; set; }
         public string? Status { get; set; }
+        public string? PaymentMethod { get; set; }
         public decimal Subtotal { get; set; }
         public decimal DiscountAmount { get; set; }
         public decimal Total { get; set; }

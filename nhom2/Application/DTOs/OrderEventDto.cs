@@ -9,6 +9,7 @@ public class OrderEventDto
     public int? CustomerId { get; set; }
     public string? CustomerName { get; set; }
     public string Status { get; set; } = string.Empty;
+    public string PaymentMethod { get; set; } = string.Empty;
     public decimal Subtotal { get; set; }
     public decimal DiscountAmount { get; set; }
     public decimal TotalAmount { get; set; }

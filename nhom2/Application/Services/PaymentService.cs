@@ -88,6 +88,7 @@ public class PaymentService : IPaymentService
                 Customer = customer,
                 CreatedAt = DateTime.UtcNow,
                 Status = OrderStatus.Pending,
+                PaymentMethod = OrderPaymentMethod.Cash,
                 DiscountAmount = CalculateMemberDiscount(orderItems, totalQuantity, membership),
                 AmountPaid = 0,
                 OrderItems = orderItems
@@ -154,6 +155,7 @@ public class PaymentService : IPaymentService
             Customer = customer,
             CreatedAt = DateTime.UtcNow,
             Status = OrderStatus.PendingPayment,
+            PaymentMethod = OrderPaymentMethod.PayOS,
             DiscountAmount = CalculateMemberDiscount(orderItems, totalQuantity, membership),
             OrderItems = orderItems
         };
@@ -478,6 +480,7 @@ public class PaymentService : IPaymentService
         CustomerId = order.CustomerId,
         CustomerName = order.Customer?.FullName,
         Status = order.Status.ToString(),
+        PaymentMethod = order.PaymentMethod.ToString(),
         Subtotal = order.Subtotal,
         DiscountAmount = order.DiscountAmount,
         Total = order.TotalAmount,

@@ -80,6 +80,7 @@ public class OrderService : IOrderService
                 Customer = customer,
                 CreatedAt = DateTime.UtcNow,
                 Status = OrderStatus.Pending,
+                PaymentMethod = OrderPaymentMethod.Cash,
                 DiscountAmount = dto.DiscountAmount,
                 AmountPaid = dto.AmountPaid,
                 OrderItems = reservations.Select(reservation => new OrderItem(
@@ -207,6 +208,7 @@ public class OrderService : IOrderService
         var oldStatus = order.Status;
         var shouldReleaseStock = oldStatus != OrderStatus.Cancelled
             && dto.Status == OrderStatus.Cancelled;
+        var previousAmountPaid = order.AmountPaid;
 
         if (shouldReleaseStock)
             await ReleaseOrderStockAsync(order);
@@ -214,6 +216,8 @@ public class OrderService : IOrderService
         try
         {
             order.Status = dto.Status;
+            if (order.PaymentMethod == OrderPaymentMethod.Cash && dto.Status == OrderStatus.Completed)
+                order.AmountPaid = order.TotalAmount;
             order.LastModifiedAt = DateTime.UtcNow;
             await _orderRepository.UpdateOrder(order);
         }
@@ -221,6 +225,7 @@ public class OrderService : IOrderService
         {
             if (shouldReleaseStock)
                 await ReserveOrderStockAsync(order);
+            order.AmountPaid = previousAmountPaid;
             throw;
         }
 
@@ -386,6 +391,7 @@ public class OrderService : IOrderService
             CustomerId = order.CustomerId,
             CustomerName = order.Customer?.FullName,
             Status = order.Status.ToString(),
+            PaymentMethod = order.PaymentMethod.ToString(),
             Subtotal = order.Subtotal,
             DiscountAmount = order.DiscountAmount,
             Total = order.TotalAmount,
@@ -415,6 +421,7 @@ public class OrderService : IOrderService
             CustomerId = order.CustomerId,
             CustomerName = order.Customer?.FullName,
             Status = order.Status.ToString(),
+            PaymentMethod = order.PaymentMethod.ToString(),
             Subtotal = order.Subtotal,
             DiscountAmount = order.DiscountAmount,
             TotalAmount = order.TotalAmount,

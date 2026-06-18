@@ -38,6 +38,11 @@ namespace nhom2.Infrastructure.Data
                 .Property(order => order.AmountPaid)
                 .HasPrecision(18, 2);
 
+            modelBuilder.Entity<Order>()
+                .Property(order => order.PaymentMethod)
+                .HasConversion<string>()
+                .HasMaxLength(20);
+
             modelBuilder.Entity<PaymentTransaction>()
                 .HasOne(payment => payment.Order)
                 .WithOne(order => order.Payment)
