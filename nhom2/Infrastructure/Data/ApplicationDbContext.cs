@@ -12,6 +12,8 @@ namespace nhom2.Infrastructure.Data
         public DbSet<Customer> Customers { get; set; }
         public DbSet<Supplier> Suppliers { get; set; }
         public DbSet<PaymentTransaction> PaymentTransactions { get; set; }
+        public DbSet<ChatSession> ChatSessions { get; set; }
+        public DbSet<ChatMessage> ChatMessages { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -60,6 +62,15 @@ namespace nhom2.Infrastructure.Data
             modelBuilder.Entity<Customer>()
                 .HasIndex(customer => customer.Phone)
                 .IsUnique();
+
+            modelBuilder.Entity<ChatSession>()
+                .HasIndex(session => new { session.CustomerUserId, session.IsActive });
+
+            modelBuilder.Entity<ChatMessage>()
+                .HasOne(message => message.Session)
+                .WithMany(session => session.Messages)
+                .HasForeignKey(message => message.ChatSessionId)
+                .OnDelete(DeleteBehavior.Cascade);
         }
     }
 }

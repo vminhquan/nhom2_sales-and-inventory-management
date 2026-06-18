@@ -22,11 +22,17 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
 builder.Services.AddScoped<IOrder, OrderRepo>();
 builder.Services.AddScoped<ICustomer, CustomerRepo>();
 builder.Services.AddScoped<ISupplier, SupplierRepo>();
+builder.Services.AddScoped<IChatSession, ChatSessionRepo>();
 builder.Services.AddScoped<IOrderService, OrderService>();
 builder.Services.AddScoped<ICustomerService, CustomerService>();
 builder.Services.AddScoped<ISupplierService, SupplierService>();
 builder.Services.AddScoped<IPaymentService, PaymentService>();
 builder.Services.AddHostedService<PaymentExpirationWorker>();
+
+builder.Services.AddHttpClient<IChatbotService, ChatbotService>(client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(30);
+});
 
 builder.Services.AddHttpClient<PayOsClient>(client =>
 {
