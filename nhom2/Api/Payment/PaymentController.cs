@@ -27,7 +27,7 @@ public class PaymentController : ControllerBase
     }
 
     [HttpPost("links")]
-    [AllowAnonymous]
+    [Authorize(Roles = "Customer")]
     public async Task<IActionResult> CreateLink(CreatePaymentLinkDto dto)
     {
         try

@@ -16,10 +16,12 @@ namespace nhom2.Api.Order
     public class OrderController : ControllerBase
     {
         private readonly IOrderService _orderService;
+        private readonly IPaymentService _paymentService;
 
-        public OrderController(IOrderService orderService)
+        public OrderController(IOrderService orderService, IPaymentService paymentService)
         {
             _orderService = orderService;
+            _paymentService = paymentService;
         }
 
         [HttpGet]
@@ -124,6 +126,55 @@ namespace nhom2.Api.Order
             catch (Exception ex)
             {
                 return StatusCode(500, new { success = false, message = ex.Message });
+            }
+        }
+
+        [HttpPost("customer-cash")]
+        [Authorize(Roles = "Customer")]
+        public async Task<IActionResult> CreateCustomerCashOrder([FromBody] CreatePaymentLinkDto dto)
+        {
+            try
+            {
+                ApplyAuthenticatedCustomer(dto);
+                var order = await _paymentService.CreateCashOrderAsync(dto);
+                return CreatedAtAction(nameof(GetMyPurchases), new { id = order.Id },
+                    new { success = true, data = order });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { success = false, message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Conflict(new { success = false, message = ex.Message });
+            }
+            catch (HttpRequestException ex)
+            {
+                return StatusCode(503, new { success = false, message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = ex.Message });
+            }
+        }
+
+        private void ApplyAuthenticatedCustomer(CreatePaymentLinkDto dto)
+        {
+            var idValue = User.FindFirstValue(ClaimTypes.NameIdentifier)
+                ?? User.FindFirstValue(JwtRegisteredClaimNames.Sub);
+            if (int.TryParse(idValue, out var userId))
+                dto.AuthenticatedCustomerUserId = userId;
+
+            var email = User.FindFirstValue(ClaimTypes.Email)
+                ?? User.FindFirstValue(JwtRegisteredClaimNames.Email);
+            if (!string.IsNullOrWhiteSpace(email))
+            {
+                dto.AuthenticatedCustomerEmail = email.Trim();
+                dto.Email = email.Trim();
             }
         }
 

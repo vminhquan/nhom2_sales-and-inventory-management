@@ -39,6 +39,78 @@ public class PaymentService : IPaymentService
         _logger = logger;
     }
 
+    public async Task<OrderResponseDto> CreateCashOrderAsync(CreatePaymentLinkDto dto)
+    {
+        Validate(dto);
+
+        var requestedItems = dto.OrderItems
+            .GroupBy(item => item.ProductId)
+            .Select(group => new OrderItemDto
+            {
+                ProductId = group.Key,
+                Quantity = group.Sum(item => item.Quantity)
+            })
+            .ToList();
+
+        var orderItems = new List<OrderItem>();
+        var totalQuantity = requestedItems.Sum(item => item.Quantity);
+        var reserved = new List<(int ProductId, int Quantity)>();
+
+        await using var transaction = await _context.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted);
+        try
+        {
+            foreach (var item in requestedItems)
+            {
+                var reservation = await _productClient.ReserveStockAsync(new ReserveStockRequest
+                {
+                    ProductId = item.ProductId,
+                    Quantity = item.Quantity,
+                    ReferenceId = $"cash:{dto.AuthenticatedCustomerUserId}:{item.ProductId}:{Guid.NewGuid():N}"
+                });
+                reserved.Add((item.ProductId, item.Quantity));
+                orderItems.Add(new OrderItem(item.Quantity, reservation.Product.SellingPrice)
+                {
+                    ProductId = reservation.Product.Id,
+                    ProductName = reservation.Product.Name
+                });
+            }
+
+            var customer = await GetOrCreateCustomerAsync(dto);
+            var membership = !string.IsNullOrWhiteSpace(customer.Email)
+                ? await _userClient.GetCustomerMembershipByEmailAsync(customer.Email)
+                : null;
+            var systemUserId = _configuration.GetValue<int?>("Checkout:SystemUserId")
+                ?? throw new InvalidOperationException("Checkout:SystemUserId is not configured.");
+            var order = new Order
+            {
+                UserId = dto.AuthenticatedCustomerUserId ?? systemUserId,
+                CustomerId = customer.Id,
+                Customer = customer,
+                CreatedAt = DateTime.UtcNow,
+                Status = OrderStatus.Pending,
+                DiscountAmount = CalculateMemberDiscount(orderItems, totalQuantity, membership),
+                AmountPaid = 0,
+                OrderItems = orderItems
+            };
+
+            _context.Orders.Add(order);
+            await _context.SaveChangesAsync();
+            await transaction.CommitAsync();
+            return MapOrder(order);
+        }
+        catch
+        {
+            foreach (var item in reserved)
+            {
+                await _productClient.ReleaseStockAsync(
+                    item.ProductId,
+                    item.Quantity,
+                    $"cash:{dto.AuthenticatedCustomerUserId}:{item.ProductId}:rollback");
+            }
+            throw;
+        }
+    }
+
     public async Task<PaymentLinkResponseDto> CreatePaymentLinkAsync(CreatePaymentLinkDto dto)
     {
         Validate(dto);
@@ -397,6 +469,31 @@ public class PaymentService : IPaymentService
         OrderCode = payment.OrderCode,
         CheckoutUrl = payment.CheckoutUrl,
         ExpiresAt = payment.ExpiresAt
+    };
+
+    private static OrderResponseDto MapOrder(Order order) => new()
+    {
+        Id = order.Id,
+        UserId = order.UserId,
+        CustomerId = order.CustomerId,
+        CustomerName = order.Customer?.FullName,
+        Status = order.Status.ToString(),
+        Subtotal = order.Subtotal,
+        DiscountAmount = order.DiscountAmount,
+        Total = order.TotalAmount,
+        AmountPaid = order.AmountPaid,
+        DebtAmount = order.DebtAmount,
+        CreatedAt = order.CreatedAt,
+        LastModifiedAt = order.LastModifiedAt,
+        OrderItems = order.OrderItems.Select(item => new OrderItemResponseDto
+        {
+            Id = item.Id,
+            ProductId = item.ProductId,
+            ProductName = item.ProductName,
+            Quantity = item.Quantity,
+            Price = item.Price,
+            SubTotal = item.SubTotal
+        }).ToList()
     };
 
     private static PaymentStatusDto MapStatus(PaymentTransaction payment) => new()
