@@ -42,6 +42,24 @@ public class ChatbotController : ControllerBase
         }
         catch (InvalidOperationException ex)
         {
+            if (ex.Message.Contains("OPENAI_API_KEY", StringComparison.OrdinalIgnoreCase))
+            {
+                return StatusCode(503, new
+                {
+                    success = false,
+                    message = "Chatbot chưa được cấu hình OPENAI_API_KEY trên server."
+                });
+            }
+
+            if (ex.Message.Contains("OpenAI API error", StringComparison.OrdinalIgnoreCase))
+            {
+                return StatusCode(503, new
+                {
+                    success = false,
+                    message = "Chatbot chưa gọi được OpenAI API. Vui lòng kiểm tra OPENAI_API_KEY trên server."
+                });
+            }
+
             return StatusCode(503, new { success = false, message = ex.Message });
         }
         catch (HttpRequestException ex)

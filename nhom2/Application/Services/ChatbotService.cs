@@ -96,8 +96,7 @@ public class ChatbotService : IChatbotService
 
     private async Task<string> AskOpenAiAsync(string dataContext, IReadOnlyCollection<ChatMessage> history)
     {
-        var apiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY")
-            ?? _configuration["OpenAI:ApiKey"];
+        var apiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
         if (string.IsNullOrWhiteSpace(apiKey))
             throw new InvalidOperationException("OPENAI_API_KEY is not configured.");
 
