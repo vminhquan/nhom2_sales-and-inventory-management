@@ -69,6 +69,8 @@ public class OrderService : IOrderService
                 reservations.Add(await _productClient.ReserveStockAsync(new ReserveStockRequest
                 {
                     ProductId = item.ProductId,
+                    ProductVariantId = item.ProductVariantId,
+                    ProductVariantColorId = item.ProductVariantColorId,
                     Quantity = item.Quantity
                 }));
             }
@@ -84,11 +86,18 @@ public class OrderService : IOrderService
                 DiscountAmount = dto.DiscountAmount,
                 AmountPaid = dto.AmountPaid,
                 OrderItems = reservations.Select(reservation => new OrderItem(
-                    requestedItems.Single(item => item.ProductId == reservation.Product.Id).Quantity,
+                    requestedItems.Single(item => item.ProductId == reservation.Product.Id
+                        && item.ProductVariantId == reservation.Product.ProductVariantId
+                        && item.ProductVariantColorId == reservation.Product.ProductVariantColorId).Quantity,
                     reservation.Product.SellingPrice)
                 {
                     ProductId = reservation.Product.Id,
-                    ProductName = reservation.Product.Name
+                    ProductVariantId = reservation.Product.ProductVariantId,
+                    ProductVariantColorId = reservation.Product.ProductVariantColorId,
+                    ProductName = reservation.Product.Name,
+                    VariantName = reservation.Product.VariantName,
+                    ColorName = reservation.Product.ColorName,
+                    Sku = reservation.Product.Sku
                 }).ToList()
             };
 
@@ -270,10 +279,12 @@ public class OrderService : IOrderService
     private static List<OrderItemDto> AggregateItems(IEnumerable<OrderItemDto> items)
     {
         return items
-            .GroupBy(item => item.ProductId)
+            .GroupBy(item => new { item.ProductId, item.ProductVariantId, item.ProductVariantColorId })
             .Select(group => new OrderItemDto
             {
-                ProductId = group.Key,
+                ProductId = group.Key.ProductId,
+                ProductVariantId = group.Key.ProductVariantId,
+                ProductVariantColorId = group.Key.ProductVariantColorId,
                 Quantity = group.Sum(item => item.Quantity)
             })
             .ToList();
@@ -313,17 +324,23 @@ public class OrderService : IOrderService
 
     private async Task ReleaseOrderStockAsync(Order order)
     {
-        foreach (var item in order.OrderItems.GroupBy(item => item.ProductId))
-            await _productClient.ReleaseStockAsync(item.Key, item.Sum(value => value.Quantity));
+        foreach (var item in order.OrderItems.GroupBy(item => new
+                 { item.ProductId, item.ProductVariantId, item.ProductVariantColorId }))
+            await _productClient.ReleaseStockAsync(item.Key.ProductId, item.Sum(value => value.Quantity),
+                productVariantId: item.Key.ProductVariantId,
+                productVariantColorId: item.Key.ProductVariantColorId);
     }
 
     private async Task ReserveOrderStockAsync(Order order)
     {
-        foreach (var item in order.OrderItems.GroupBy(item => item.ProductId))
+        foreach (var item in order.OrderItems.GroupBy(item => new
+                 { item.ProductId, item.ProductVariantId, item.ProductVariantColorId }))
         {
             await _productClient.ReserveStockAsync(new ReserveStockRequest
             {
-                ProductId = item.Key,
+                ProductId = item.Key.ProductId,
+                ProductVariantId = item.Key.ProductVariantId,
+                ProductVariantColorId = item.Key.ProductVariantColorId,
                 Quantity = item.Sum(value => value.Quantity)
             });
         }
@@ -403,7 +420,12 @@ public class OrderService : IOrderService
             {
                 Id = item.Id,
                 ProductId = item.ProductId,
+                ProductVariantId = item.ProductVariantId,
+                ProductVariantColorId = item.ProductVariantColorId,
                 ProductName = item.ProductName,
+                VariantName = item.VariantName,
+                ColorName = item.ColorName,
+                Sku = item.Sku,
                 Quantity = item.Quantity,
                 Price = item.Price,
                 SubTotal = item.SubTotal

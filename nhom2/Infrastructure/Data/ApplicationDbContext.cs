@@ -59,6 +59,12 @@ namespace nhom2.Infrastructure.Data
                 .Property(item => item.Price)
                 .HasPrecision(18, 2);
 
+            modelBuilder.Entity<OrderItem>().Property(item => item.VariantName).HasMaxLength(80);
+            modelBuilder.Entity<OrderItem>().Property(item => item.ColorName).HasMaxLength(80);
+            modelBuilder.Entity<OrderItem>().Property(item => item.Sku).HasMaxLength(120);
+            modelBuilder.Entity<OrderItem>()
+                .HasIndex(item => new { item.ProductId, item.ProductVariantId, item.ProductVariantColorId });
+
             modelBuilder.Entity<Customer>()
                 .HasIndex(customer => customer.Phone)
                 .IsUnique();

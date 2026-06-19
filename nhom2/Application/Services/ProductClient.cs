@@ -56,7 +56,8 @@ public class ProductClient : IProductClient
             ?? throw new InvalidOperationException("Product service trả về dữ liệu giữ kho không hợp lệ");
     }
 
-    public async Task ReleaseStockAsync(int productId, int quantity, string? referenceId = null)
+    public async Task ReleaseStockAsync(int productId, int quantity, string? referenceId = null,
+        int? productVariantId = null, int? productVariantColorId = null)
     {
         if (quantity <= 0)
             return;
@@ -66,6 +67,8 @@ public class ProductClient : IProductClient
             Content = JsonContent.Create(new ReserveStockRequest
             {
                 ProductId = productId,
+                ProductVariantId = productVariantId,
+                ProductVariantColorId = productVariantColorId,
                 Quantity = quantity,
                 ReferenceId = referenceId
             })

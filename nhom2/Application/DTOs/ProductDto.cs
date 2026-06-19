@@ -10,11 +10,41 @@ namespace nhom2.Application.DTOs
         public string CategoryName { get; set; } = string.Empty;
         public int Quantity { get; set; }
         public int ReserveStock { get; set; }
+        public int? ProductVariantId { get; set; }
+        public int? ProductVariantColorId { get; set; }
+        public string? VariantName { get; set; }
+        public string? ColorName { get; set; }
+        public string? Sku { get; set; }
+        public List<ProductVariantDto> Variants { get; set; } = new();
+    }
+
+    public class ProductVariantDto
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string Sku { get; set; } = string.Empty;
+        public decimal OriginalPrice { get; set; }
+        public decimal? SalePrice { get; set; }
+        public decimal SellingPrice { get; set; }
+        public int Quantity { get; set; }
+        public int ReserveStock { get; set; }
+        public bool IsActive { get; set; }
+        public List<ProductVariantColorDto> Colors { get; set; } = new();
+    }
+
+    public class ProductVariantColorDto
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public int Quantity { get; set; }
+        public bool IsActive { get; set; }
     }
 
     public class ReserveStockRequest
     {
         public int ProductId { get; set; }
+        public int? ProductVariantId { get; set; }
+        public int? ProductVariantColorId { get; set; }
         public int Quantity { get; set; }
         public string? ReferenceId { get; set; }
     }

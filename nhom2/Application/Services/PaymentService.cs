@@ -44,17 +44,19 @@ public class PaymentService : IPaymentService
         Validate(dto);
 
         var requestedItems = dto.OrderItems
-            .GroupBy(item => item.ProductId)
+            .GroupBy(item => new { item.ProductId, item.ProductVariantId, item.ProductVariantColorId })
             .Select(group => new OrderItemDto
             {
-                ProductId = group.Key,
+                ProductId = group.Key.ProductId,
+                ProductVariantId = group.Key.ProductVariantId,
+                ProductVariantColorId = group.Key.ProductVariantColorId,
                 Quantity = group.Sum(item => item.Quantity)
             })
             .ToList();
 
         var orderItems = new List<OrderItem>();
         var totalQuantity = requestedItems.Sum(item => item.Quantity);
-        var reserved = new List<(int ProductId, int Quantity)>();
+        var reserved = new List<(int ProductId, int? VariantId, int? ColorId, int Quantity)>();
 
         await using var transaction = await _context.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted);
         try
@@ -64,14 +66,21 @@ public class PaymentService : IPaymentService
                 var reservation = await _productClient.ReserveStockAsync(new ReserveStockRequest
                 {
                     ProductId = item.ProductId,
+                    ProductVariantId = item.ProductVariantId,
+                    ProductVariantColorId = item.ProductVariantColorId,
                     Quantity = item.Quantity,
                     ReferenceId = $"cash:{dto.AuthenticatedCustomerUserId}:{item.ProductId}:{Guid.NewGuid():N}"
                 });
-                reserved.Add((item.ProductId, item.Quantity));
+                reserved.Add((item.ProductId, item.ProductVariantId, item.ProductVariantColorId, item.Quantity));
                 orderItems.Add(new OrderItem(item.Quantity, reservation.Product.SellingPrice)
                 {
                     ProductId = reservation.Product.Id,
-                    ProductName = reservation.Product.Name
+                    ProductVariantId = reservation.Product.ProductVariantId,
+                    ProductVariantColorId = reservation.Product.ProductVariantColorId,
+                    ProductName = reservation.Product.Name,
+                    VariantName = reservation.Product.VariantName,
+                    ColorName = reservation.Product.ColorName,
+                    Sku = reservation.Product.Sku
                 });
             }
 
@@ -106,7 +115,9 @@ public class PaymentService : IPaymentService
                 await _productClient.ReleaseStockAsync(
                     item.ProductId,
                     item.Quantity,
-                    $"cash:{dto.AuthenticatedCustomerUserId}:{item.ProductId}:rollback");
+                    $"cash:{dto.AuthenticatedCustomerUserId}:{item.ProductId}:{item.VariantId}:{item.ColorId}:rollback",
+                    item.VariantId,
+                    item.ColorId);
             }
             throw;
         }
@@ -120,10 +131,12 @@ public class PaymentService : IPaymentService
         _ = GetRequired("Checkout:BackendBaseUrl");
 
         var requestedItems = dto.OrderItems
-            .GroupBy(item => item.ProductId)
+            .GroupBy(item => new { item.ProductId, item.ProductVariantId, item.ProductVariantColorId })
             .Select(group => new OrderItemDto
             {
-                ProductId = group.Key,
+                ProductId = group.Key.ProductId,
+                ProductVariantId = group.Key.ProductVariantId,
+                ProductVariantColorId = group.Key.ProductVariantColorId,
                 Quantity = group.Sum(item => item.Quantity)
             })
             .ToList();
@@ -133,12 +146,18 @@ public class PaymentService : IPaymentService
         {
             var product = await _productClient.GetProductByIdAsync(item.ProductId)
                 ?? throw new KeyNotFoundException($"Product {item.ProductId} không tồn tại");
-            if (product.Quantity < item.Quantity)
+            var selection = ResolveSelection(product, item);
+            if (selection.Variant.Quantity < item.Quantity || selection.Color.Quantity < item.Quantity)
                 throw new InvalidOperationException($"Sản phẩm {product.Name} không đủ tồn kho");
-            orderItems.Add(new OrderItem(item.Quantity, product.SellingPrice)
+            orderItems.Add(new OrderItem(item.Quantity, selection.Variant.SellingPrice)
             {
                 ProductId = product.Id,
-                ProductName = product.Name
+                ProductVariantId = selection.Variant.Id,
+                ProductVariantColorId = selection.Color.Id,
+                ProductName = product.Name,
+                VariantName = selection.Variant.Name,
+                ColorName = selection.Color.Name,
+                Sku = selection.Variant.Sku
             });
         }
 
@@ -305,7 +324,7 @@ public class PaymentService : IPaymentService
         }
         payment.Order.Status = OrderStatus.ProcessingPayment;
 
-        var reserved = new List<(int ProductId, int Quantity)>();
+        var reserved = new List<(int ProductId, int? VariantId, int? ColorId, int Quantity)>();
         try
         {
             foreach (var item in payment.Order.OrderItems)
@@ -313,10 +332,12 @@ public class PaymentService : IPaymentService
                 await _productClient.ReserveStockAsync(new ReserveStockRequest
                 {
                     ProductId = item.ProductId,
+                    ProductVariantId = item.ProductVariantId,
+                    ProductVariantColorId = item.ProductVariantColorId,
                     Quantity = item.Quantity,
-                    ReferenceId = $"payos:{orderCode}:{item.ProductId}:reserve"
+                    ReferenceId = $"payos:{orderCode}:{item.ProductId}:{item.ProductVariantId}:{item.ProductVariantColorId}:reserve"
                 });
-                reserved.Add((item.ProductId, item.Quantity));
+                reserved.Add((item.ProductId, item.ProductVariantId, item.ProductVariantColorId, item.Quantity));
             }
         }
         catch
@@ -325,7 +346,9 @@ public class PaymentService : IPaymentService
                 await _productClient.ReleaseStockAsync(
                     item.ProductId,
                     item.Quantity,
-                    $"payos:{orderCode}:{item.ProductId}:rollback");
+                    $"payos:{orderCode}:{item.ProductId}:{item.VariantId}:{item.ColorId}:rollback",
+                    item.VariantId,
+                    item.ColorId);
             payment.Order.Status = OrderStatus.PaymentFailed;
             payment.Order.LastModifiedAt = DateTime.UtcNow;
             await _context.SaveChangesAsync();
@@ -492,12 +515,33 @@ public class PaymentService : IPaymentService
         {
             Id = item.Id,
             ProductId = item.ProductId,
+            ProductVariantId = item.ProductVariantId,
+            ProductVariantColorId = item.ProductVariantColorId,
             ProductName = item.ProductName,
+            VariantName = item.VariantName,
+            ColorName = item.ColorName,
+            Sku = item.Sku,
             Quantity = item.Quantity,
             Price = item.Price,
             SubTotal = item.SubTotal
         }).ToList()
     };
+
+    private static (ProductVariantDto Variant, ProductVariantColorDto Color) ResolveSelection(
+        ProductDto product, OrderItemDto requested)
+    {
+        var variant = requested.ProductVariantId.HasValue
+            ? product.Variants.FirstOrDefault(value => value.Id == requested.ProductVariantId)
+            : product.Variants.FirstOrDefault(value => value.IsActive && value.Quantity > 0);
+        if (variant is null || !variant.IsActive)
+            throw new InvalidOperationException($"Phiên bản sản phẩm {product.Name} không hợp lệ hoặc đã ngừng bán");
+        var color = requested.ProductVariantColorId.HasValue
+            ? variant.Colors.FirstOrDefault(value => value.Id == requested.ProductVariantColorId)
+            : variant.Colors.FirstOrDefault(value => value.IsActive && value.Quantity > 0);
+        if (color is null || !color.IsActive)
+            throw new InvalidOperationException($"Màu sản phẩm {product.Name} không hợp lệ hoặc đã hết hàng");
+        return (variant, color);
+    }
 
     private static PaymentStatusDto MapStatus(PaymentTransaction payment) => new()
     {
