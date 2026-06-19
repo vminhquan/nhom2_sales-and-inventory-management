@@ -1,4 +1,3 @@
-using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.Extensions.Configuration;
@@ -75,7 +74,7 @@ public class ChatbotService : IChatbotService
             : null;
         var context = BuildContext(products, orders, membership);
         var history = await _chatRepository.GetMessagesAsync(session.Id, 12);
-        var reply = await AskOpenAiAsync(context, history);
+        var reply = await AskGeminiAsync(context, history);
         var actions = BuildActions(reply, products);
 
         await _chatRepository.AddMessageAsync(new ChatMessage
@@ -97,57 +96,78 @@ public class ChatbotService : IChatbotService
 
     public Task EndSessionAsync(int customerUserId) => _chatRepository.EndActiveAsync(customerUserId);
 
-    private async Task<string> AskOpenAiAsync(string dataContext, IReadOnlyCollection<ChatMessage> history)
+    private async Task<string> AskGeminiAsync(string dataContext, IReadOnlyCollection<ChatMessage> history)
     {
-        var apiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
+        var apiKey = Environment.GetEnvironmentVariable("GEMINI_API_KEY");
         if (string.IsNullOrWhiteSpace(apiKey))
-            throw new InvalidOperationException("OPENAI_API_KEY is not configured.");
+            throw new InvalidOperationException("GEMINI_API_KEY is not configured.");
 
-        var model = _configuration["OpenAI:Model"];
+        var model = _configuration["Gemini:Model"];
         if (string.IsNullOrWhiteSpace(model))
-            model = "gpt-4o-mini";
+            model = "gemini-2.5-flash";
 
-        using var request = new HttpRequestMessage(HttpMethod.Post, "https://api.openai.com/v1/chat/completions");
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+        var endpoint = $"https://generativelanguage.googleapis.com/v1beta/models/{Uri.EscapeDataString(model)}:generateContent";
+        using var request = new HttpRequestMessage(HttpMethod.Post, endpoint);
+        request.Headers.Add("x-goog-api-key", apiKey);
         request.Content = JsonContent.Create(new
         {
-            model,
-            temperature = 0.2,
-            messages = new List<object>
+            systemInstruction = new
+            {
+                parts = new[]
+                {
+                    new
+                    {
+                        text = "Bạn là chatbot hỗ trợ khách hàng của Smart Sale Store. "
+                            + "Chỉ trả lời dựa trên DATA_THAT được cung cấp. Không tự bịa giá, tồn kho, "
+                            + "khuyến mãi, hạng thành viên hoặc trạng thái đơn hàng. Nếu dữ liệu không có, "
+                            + "hãy nói rõ chưa có dữ liệu. Trả lời ngắn gọn bằng tiếng Việt. Khi gợi ý sản phẩm, "
+                            + "hãy ghi ID sản phẩm dạng #123 để frontend tạo nút mở hoặc thêm vào giỏ hàng."
+                    }
+                }
+            },
+            contents = new[]
             {
                 new
                 {
-                    role = "system",
-                    content = "Bạn là chatbot hỗ trợ khách hàng của Smart Sale Store. Chỉ trả lời dựa trên DATA_THAT bên dưới. Không tự bịa giá, tồn kho, khuyến mãi, hạng thành viên hoặc trạng thái đơn. Nếu dữ liệu không có, nói rõ là chưa có dữ liệu. Trả lời ngắn gọn bằng tiếng Việt. Khi gợi ý sản phẩm, hãy ghi ID sản phẩm dạng #123 để frontend tạo nút mở/thêm giỏ."
-                },
-                new { role = "system", content = dataContext }
+                    role = "user",
+                    parts = new[] { new { text = dataContext } }
+                }
             }.Concat(history.Select(message => new
             {
-                role = message.Role == "assistant" ? "assistant" : "user",
-                content = message.Content
-            }))
+                role = message.Role == "assistant" ? "model" : "user",
+                parts = new[] { new { text = message.Content } }
+            })),
+            generationConfig = new
+            {
+                temperature = 0.2,
+                maxOutputTokens = 700
+            }
         });
 
         using var response = await _http.SendAsync(request);
         var content = await response.Content.ReadAsStringAsync();
         if (!response.IsSuccessStatusCode)
         {
-            var message = GetOpenAiErrorMessage(content);
+            var message = GetGeminiErrorMessage(content);
             _logger.LogWarning(
-                "OpenAI API returned {StatusCode}. Message: {Message}",
+                "Gemini API returned {StatusCode}. Message: {Message}",
                 (int)response.StatusCode,
                 message);
             throw new InvalidOperationException(
-                $"OpenAI API error: {(int)response.StatusCode} {response.StatusCode}. {message}");
+                $"Gemini API error: {(int)response.StatusCode} {response.StatusCode}. {message}");
         }
 
         using var document = JsonDocument.Parse(content);
-        return document.RootElement
-            .GetProperty("choices")[0]
-            .GetProperty("message")
+        var parts = document.RootElement
+            .GetProperty("candidates")[0]
             .GetProperty("content")
-            .GetString()
-            ?.Trim() ?? "Mình chưa tạo được câu trả lời lúc này.";
+            .GetProperty("parts");
+        var reply = string.Join("", parts.EnumerateArray()
+            .Where(part => part.TryGetProperty("text", out _))
+            .Select(part => part.GetProperty("text").GetString()));
+        return string.IsNullOrWhiteSpace(reply)
+            ? "Mình chưa tạo được câu trả lời lúc này."
+            : reply.Trim();
     }
 
     private static string BuildContext(
@@ -228,10 +248,10 @@ public class ChatbotService : IChatbotService
         CreatedAt = message.CreatedAt
     };
 
-    private static string GetOpenAiErrorMessage(string content)
+    private static string GetGeminiErrorMessage(string content)
     {
         if (string.IsNullOrWhiteSpace(content))
-            return "OpenAI không trả về nội dung lỗi.";
+            return "Gemini không trả về nội dung lỗi.";
 
         try
         {
@@ -239,7 +259,7 @@ public class ChatbotService : IChatbotService
             if (document.RootElement.TryGetProperty("error", out var error))
             {
                 if (error.TryGetProperty("message", out var message))
-                    return message.GetString() ?? "OpenAI trả về lỗi không có message.";
+                    return message.GetString() ?? "Gemini trả về lỗi không có message.";
             }
         }
         catch

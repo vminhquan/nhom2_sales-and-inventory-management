@@ -42,21 +42,21 @@ public class ChatbotController : ControllerBase
         }
         catch (InvalidOperationException ex)
         {
-            if (ex.Message.Contains("OPENAI_API_KEY", StringComparison.OrdinalIgnoreCase))
+            if (ex.Message.Contains("GEMINI_API_KEY", StringComparison.OrdinalIgnoreCase))
             {
                 return StatusCode(503, new
                 {
                     success = false,
-                    message = "Chatbot chưa được cấu hình OPENAI_API_KEY trên server."
+                    message = "Chatbot chưa được cấu hình GEMINI_API_KEY trên server."
                 });
             }
 
-            if (ex.Message.Contains("OpenAI API error", StringComparison.OrdinalIgnoreCase))
+            if (ex.Message.Contains("Gemini API error", StringComparison.OrdinalIgnoreCase))
             {
                 return StatusCode(503, new
                 {
                     success = false,
-                    message = $"Chatbot chưa gọi được OpenAI API. {ex.Message}"
+                    message = $"Chatbot chưa gọi được Gemini API. {ex.Message}"
                 });
             }
 
